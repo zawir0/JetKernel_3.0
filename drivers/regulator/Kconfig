@@ -101,6 +101,13 @@ config REGULATOR_MAX8698
 	  This driver controls a Maxim 8698 voltage output
 	  regulator via I2C bus.
 
+config REGULATOR_MAX8906
+	tristate "Maxim 8906 voltage regulator"
+	depends on I2C
+	help
+	  This driver controls a Maxim 8906 voltage output
+	  regulator via I2C bus.
+
 config REGULATOR_MAX8925
 	tristate "Maxim MAX8925 Power Management IC"
 	depends on MFD_MAX8925
