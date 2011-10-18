@@ -16,49 +16,48 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * this file is based on max8698.h, max8997.h max8998.h and max8906.h by 
+ * Tomasz Figa <tomasz.figa at gmail.com>, 
+ * MyungJoo Ham <myungjoo.ham@smasung.com>,
+ * Kyungmin Park <kyungmin.park@samsung.com>
+ * Marek Szyprowski <m.szyprowski@samsung.com>
+ * Mark Underwood (04/04/2006 Maxim Integrated Product)
  */
 
 #ifndef _MAX8906_H_
 #define _MAX8906_H_
 
-enum {
-	MAX8906_LDO2,
-	MAX8906_LDO3,
-	MAX8906_LDO4,
-	MAX8906_LDO5,
-	MAX8906_LDO6,
-	MAX8906_LDO7,
-	MAX8906_LDO8,
-	MAX8906_LDO9,
-	MAX8906_BUCK1,
-	MAX8906_BUCK2,
-	MAX8906_BUCK3
-};
 
-/**
- * max8906_regulator_data - regulator data
- * @id: regulator id
- * @initdata: regulator init data (contraints, supplies, ...)
- */
-struct max8906_regulator_data {
-	int				id;
-	struct regulator_init_data	*initdata;
-};
+/* MAX8906 each register info */
+typedef const struct {
+	const byte  slave_addr;
+	const byte  addr;
+} max8906_register_type;
 
-/**
- * struct max8906_board - packages regulator init data
- * @num_regulators: number of regultors used
- * @regulators: array of defined regulators
- * @lbhyst: Low Main-Battery Comparator Hysteresis register value
- * @lbth: Low Main-Battery threshold voltage register value
- * @lben: Enable Low Main-Battery alarm signal
- */
-struct max8906_platform_data {
-	int				num_regulators;
-	struct max8906_regulator_data	*regulators;
-	unsigned int lbhyst;
-	unsigned int lbth;
-	unsigned int lben;
-};
+/* MAX8906 each function info */
+typedef const struct {
+	const byte  slave_addr;
+	const byte  addr;
+	const byte  mask;
+	const byte  clear;
+	const byte  shift;
+} max8906_function_type;
+
+
+
+
+
+/* MAX8906 each function info */
+typedef const struct {
+    const dword  reg_name;
+    const max8906_pm_function_type active_discharge;
+    const max8906_pm_function_type  ena_src_item;
+    const max8906_pm_function_type  sw_ena_dis;
+} max8906_regulator_name_type;
+
+
+
+
 
 #endif /* _MAX8906_H_ */

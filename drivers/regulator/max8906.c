@@ -16,6 +16,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * this driver is based on max8698.c, max8997.c and max8998.c by 
+ * Tomasz Figa <tomasz.figa at gmail.com>, 
+ * MyungJoo Ham <myungjoo.ham@smasung.com>,
+ * Kyungmin Park <kyungmin.park@samsung.com>
+ * Marek Szyprowski <m.szyprowski@samsung.com>
  */
 
 #include <linux/module.h>
@@ -29,7 +35,8 @@
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
-#include <linux/regulator/max8906.h>
+#include <linux/mfd/max8906.h>
+#include <linux/mfd/max8906-private.h>
 
 /*
  * Driver data
