@@ -28,36 +28,67 @@
 #ifndef _MAX8906_H_
 #define _MAX8906_H_
 
+enum {
+	// Linear Regulators (LDOs)
+	MAX8906_WBBCORE,
+	MAX8906_WBBRF,
+	MAX8906_APPS,
+	MAX8906_IO,
+	MAX8906_MEM,
+	MAX8906_WBBMEM,
+	MAX8906_WBBIO,
+	MAX8906_WBBANA,
+	MAX8906_RFRXL,
+	MAX8906_RFTXL,
+	MAX8906_RFRXH,
+	MAX8906_RFTCXO,
+	MAX8906_LDOA,
+	MAX8906_LDOB,
+	MAX8906_LDOC,
+	MAX8906_LDOD,
+	MAX8906_SIMLT,
+	MAX8906_SRAM,
+	MAX8906_CARD1,
+	MAX8906_CARD2,
+	MAX8906_MVT,
+	MAX8906_BIAS,
+	MAX8906_VBUS,
+	MAX8906_USBTXRX,
+	// Flexible Power Sequencers (DCDC BUCK)
+	MAX8906_SEQ1,
+	MAX8906_SEQ2,
+	MAX8906_SEQ3,
+	MAX8906_SEQ4,
+	MAX8906_SEQ5,
+	MAX8906_SEQ6,
+	MAX8906_SEQ7,
+	MAX8906_SW_CNTL
+};
 
-/* MAX8906 each register info */
-typedef const struct {
-	const byte  slave_addr;
-	const byte  addr;
-} max8906_register_type;
+/**
+ * max8906_regulator_data - regulator data
+ * @id: regulator id
+ * @initdata: regulator init data (contraints, supplies, ...)
+ */
+struct max8906_regulator_data {
+	int				id;
+	struct regulator_init_data	*initdata;
+};
 
-/* MAX8906 each function info */
-typedef const struct {
-	const byte  slave_addr;
-	const byte  addr;
-	const byte  mask;
-	const byte  clear;
-	const byte  shift;
-} max8906_function_type;
-
-
-
-
-
-/* MAX8906 each function info */
-typedef const struct {
-    const dword  reg_name;
-    const max8906_pm_function_type active_discharge;
-    const max8906_pm_function_type  ena_src_item;
-    const max8906_pm_function_type  sw_ena_dis;
-} max8906_regulator_name_type;
-
-
-
-
+/**
+ * struct max8906_board - packages regulator init data
+ * @num_regulators: number of regultors used
+ * @regulators: array of defined regulators
+ * @lbhyst: Low Main-Battery Comparator Hysteresis register value
+ * @lbth: Low Main-Battery threshold voltage register value
+ * @lben: Enable Low Main-Battery alarm signal
+ */
+struct max8906_platform_data {
+	int				num_regulators;
+	struct max8906_regulator_data	*regulators;
+	unsigned int lbhyst;
+	unsigned int lbth;
+	unsigned int lben;
+};
 
 #endif /* _MAX8906_H_ */

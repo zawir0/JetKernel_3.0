@@ -1,12 +1,24 @@
 /* linux/arch/arm/mach-s3c64xx/mach-gt_s8000.c
  *
- * Copyright 2011 Dopi <dopi711 at googlemail.com>
+ * Copyright (C) 2011 Dopi <dopi711 at googlemail.com>
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
-*/
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ *
+ * Based on mach_gt_i5700.c by
+ *  Tomasz Figa <tomasz.figa at gmail.com>
+ */
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -23,8 +35,8 @@
 #include <linux/fb.h>
 #include <linux/gpio.h>
 #include <linux/delay.h>
+#include <linux/mfd/max8906.h>
 #include <linux/regulator/machine.h>
-#include <linux/regulator/max8906.h>
 #include <linux/regulator/fixed.h>
 #include <linux/android_pmem.h>
 #include <linux/reboot.h>
@@ -330,8 +342,13 @@ static struct i2c_board_info spica_cam_i2c_devs[] __initdata = {
 	/* TODO */
 };
 
-/* I2C 2 (GPIO) -	MAX8698EWO-T (voltage regulator) */
-static struct i2c_gpio_platform_data spica_pmic_i2c_pdata = {
+
+//
+// P M I C
+//
+
+/* I2C 2 (GPIO) -	MAX8906 (Power Management IC / voltage regulator) */
+static struct i2c_gpio_platform_data jet_pmic_i2c_pdata = {
 	.sda_pin		= GPIO_PWR_I2C_SDA,
 	.scl_pin		= GPIO_PWR_I2C_SCL,
 	.udelay			= 2, /* 250KHz */
@@ -340,9 +357,24 @@ static struct i2c_gpio_platform_data spica_pmic_i2c_pdata = {
 static struct platform_device spica_pmic_i2c = {
 	.name			= "i2c-gpio",
 	.id			= 2,
-	.dev.platform_data	= &spica_pmic_i2c_pdata,
+	.dev.platform_data	= &jet_pmic_i2c_pdata,
 };
 
+static struct regulator_init_data jet_ldoa_data = {
+	.constraints	= {
+		.name			= "VLCD_3.1V",
+		.min_uV			= 3100000,
+		.max_uV			= 3100000,
+		.apply_uV		= 0,
+		.always_on		= 0,
+		.valid_modes_mask	= REGULATOR_MODE_NORMAL,
+		.state_mem		= {
+			.enabled = 1,
+		},
+	},
+};
+
+/* SPICA definitions
 static struct regulator_init_data spica_ldo2_data = {
 	.constraints	= {
 		.name			= "VAP_ALIVE_1.2V",
@@ -545,34 +577,62 @@ static struct regulator_init_data spica_buck3_data = {
 		},
 	},
 };
+*/
 
-static struct max8906_regulator_data spica_regulators[] = {
-	{ MAX8906_LDO2,  &spica_ldo2_data },
-	{ MAX8906_LDO3,  &spica_ldo3_data },
-	{ MAX8906_LDO4,  &spica_ldo4_data },
-	{ MAX8906_LDO5,  &spica_ldo5_data },
-	{ MAX8906_LDO6,  &spica_ldo6_data },
-	{ MAX8906_LDO7,  &spica_ldo7_data },
-	{ MAX8906_LDO8,  &spica_ldo8_data },
-	{ MAX8906_LDO9,  &spica_ldo9_data },
-	{ MAX8906_BUCK1, &spica_buck1_data },
-	{ MAX8906_BUCK2, &spica_buck2_data },
-	{ MAX8906_BUCK3, &spica_buck3_data }
+static struct max8906_regulator_data jet_regulators[] = {
+	// Linear Regulators (LDOs)
+/*
+	{ MAX8906_WBBCORE,	&jet_wbbcore_data },
+	{ MAX8906_WBBRF,	&jet_wbbrf_data },
+	{ MAX8906_APPS,		&jet_apps_data },
+	{ MAX8906_IO,		&jet_io_data },
+	{ MAX8906_MEM,		&jet_mem_data },
+	{ MAX8906_WBBMEM,	&jet_wbbmem_data },
+	{ MAX8906_WBBIO,	&jet_wbbio_data },
+	{ MAX8906_WBBANA,	&jet_wbbana_data },
+	{ MAX8906_RFRXL,	&jet_rfrxl_data },
+	{ MAX8906_RFTXL,	&jet_rftxl_data },
+	{ MAX8906_RFRXH,	&jet_rfrxh_data },
+	{ MAX8906_RFTCXO,	&jet_rftcxo_data },
+*/
+	{ MAX8906_LDOA,		&jet_ldoa_data }
+/*
+	{ MAX8906_LDOB,		&jet_ldob_data },
+	{ MAX8906_LDOC,		&jet_ldoc_data },
+	{ MAX8906_LDOD,		&jet_ldod_data },
+	{ MAX8906_SIMLT,	&jet_simlt_data },
+	{ MAX8906_SRAM,		&jet_sram_data },
+	{ MAX8906_CARD1,	&jet_card1_data },
+	{ MAX8906_CARD2,	&jet_card2_data },
+	{ MAX8906_MVT,		&jet_mvt_data },
+	{ MAX8906_BIAS,		&jet_bias_data },
+	{ MAX8906_VBUS,		&jet_vbus_data },
+	{ MAX8906_USBTXRX,	&jet_usbtxrx_data },
+	// Flexible Power Sequencers (DCDC BUCK)
+	{ MAX8906_SEQ1,		&jet_seq1_data },
+	{ MAX8906_SEQ2,		&jet_seq2_data },
+	{ MAX8906_SEQ3,		&jet_seq3_data },
+	{ MAX8906_SEQ4,		&jet_seq4_data },
+	{ MAX8906_SEQ5,		&jet_seq5_data },
+	{ MAX8906_SEQ6,		&jet_seq6_data },
+	{ MAX8906_SEQ7,		&jet_seq7_data },
+	{ MAX8906_SW_CNTL,	&jet_sw_cntl_data }
+*/
 };
 
-static struct max8906_platform_data spica_max8698_pdata = {
-	.regulators	= spica_regulators,
-	.num_regulators	= ARRAY_SIZE(spica_regulators),
+static struct max8906_platform_data jet_max8906_pdata = {
+	.regulators	= jet_regulators,
+	.num_regulators	= ARRAY_SIZE(jet_regulators),
 	.lbhyst		= 0, /* 100 mV */
 	.lbth		= 2, /* 3,3 V */
 	.lben		= 1, /* Enable low battery alarm */
 };
 
-static struct i2c_board_info spica_pmic_i2c_devs[] __initdata = {
+static struct i2c_board_info jet_pmic_i2c_devs[] __initdata = {
 	{
 		.type		= "max8906",
-		.addr		= 0x66,
-		.platform_data	= &spica_max8698_pdata,
+		.addr		= 0x78,			// FIXME: max8906 regulators only use adr 0x78 ???
+		.platform_data	= &jet_max8906_pdata,
 	},
 };
 
@@ -2445,8 +2505,8 @@ static void __init spica_machine_init(void)
 	s3c_i2c1_set_platdata(&spica_cam_i2c);
 	i2c_register_board_info(spica_cam_i2c.bus_num, spica_cam_i2c_devs,
 					ARRAY_SIZE(spica_cam_i2c_devs));
-	i2c_register_board_info(spica_pmic_i2c.id, spica_pmic_i2c_devs,
-					ARRAY_SIZE(spica_pmic_i2c_devs));
+	i2c_register_board_info(spica_pmic_i2c.id, jet_pmic_i2c_devs,
+					ARRAY_SIZE(jet_pmic_i2c_devs));
 	i2c_register_board_info(spica_audio_i2c.id, spica_audio_i2c_devs,
 					ARRAY_SIZE(spica_audio_i2c_devs));
 	i2c_register_board_info(spica_touch_i2c.id, spica_touch_i2c_devs,

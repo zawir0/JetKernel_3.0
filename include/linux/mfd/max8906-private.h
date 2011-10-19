@@ -1221,6 +1221,29 @@ typedef enum {
 
 
 
+/* MAX8906 each register info */
+typedef const struct {
+	const unsigned char  slave_addr;
+	const unsigned char  addr;
+} max8906_register_type;
+
+/* MAX8906 each function info */
+typedef const struct {
+	const unsigned char  slave_addr;
+	const unsigned char  addr;
+	const unsigned char  mask;
+	const unsigned char  clear;
+	const unsigned char  shift;
+} max8906_function_type;
+
+/* MAX8906 each function info */
+typedef const struct {
+    const unsigned long  reg_name;
+    const max8906_pm_function_type  active_discharge;
+    const max8906_pm_function_type  ena_src_item;
+    const max8906_pm_function_type  sw_ena_dis;
+} max8906_regulator_name_type;
+
 
 
 

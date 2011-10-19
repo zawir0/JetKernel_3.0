@@ -38,63 +38,6 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-/*
- * Driver data
- */
-
-struct max8906_data {
-	struct device		*dev;
-	struct i2c_client	*i2c_client;
-	int			num_regulators;
-	struct regulator_dev	**rdev;
-	struct mutex		lock;
-	int			ramp_rate;
-};
-
-/*
- * I2C Interface
- */
-
-static int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *dest)
-{
-	struct i2c_client *client = max8906->i2c_client;
-	int ret;
-
-	mutex_lock(&max8906->lock);
-
-	ret = i2c_smbus_read_byte_data(client, reg);
-
-	mutex_unlock(&max8906->lock);
-
-	if (ret < 0)
-		return ret;
-
-	ret &= 0xff;
-	*dest = ret;
-	return 0;
-}
-
-static int max8906_i2c_device_update(struct max8906_data *max8906, u8 reg,
-				     u8 val, u8 mask)
-{
-	struct i2c_client *client = max8906->i2c_client;
-	int ret;
-
-	mutex_lock(&max8906->lock);
-
-	ret = i2c_smbus_read_byte_data(client, reg);
-	if (ret >= 0) {
-		u8 old_val = ret & 0xff;
-		u8 new_val = (val & mask) | (old_val & (~mask));
-		ret = i2c_smbus_write_byte_data(client, reg, new_val);
-		if (ret >= 0)
-			ret = 0;
-	}
-
-	mutex_unlock(&max8906->lock);
-
-	return ret;
-}
 
 /*
  * Voltage regulator
@@ -137,6 +80,7 @@ static const struct voltage_map_desc *ldo_voltage_map[] = {
 	&buck3_voltage_map_desc,	/* BUCK3 */
 };
 
+/*
 static inline int max8906_get_ldo(struct regulator_dev *rdev)
 {
 	return rdev_get_id(rdev);
@@ -636,6 +580,7 @@ static void __exit max8906_exit(void)
 	i2c_del_driver(&max8906_i2c_driver);
 }
 module_exit(max8906_exit);
+*/
 
 MODULE_DESCRIPTION("Maxim 8906 voltage regulator driver");
 MODULE_AUTHOR("Dopi <dopi711 at googlemail.com>");

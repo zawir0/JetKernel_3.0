@@ -30,7 +30,7 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-
+//#define pmic_extra_debug
 
 #ifdef PREFIX
 #undef PREFIX
@@ -39,7 +39,64 @@
 
 #define MSG_HIGH(a,b,c,d)		{}
 
-//#define pmic_extra_debug
+/*
+ * Driver data
+ */
+
+struct max8906_data {
+	struct device		*dev;
+	struct i2c_client	*i2c_client;
+	int			num_regulators;
+	struct regulator_dev	**rdev;
+	struct mutex		lock;
+	int			ramp_rate;
+};
+
+/*
+ * I2C Interface
+ */
+
+static int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *dest)
+{
+	struct i2c_client *client = max8906->i2c_client;
+	int ret;
+
+	mutex_lock(&max8906->lock);
+
+	ret = i2c_smbus_read_byte_data(client, reg);
+
+	mutex_unlock(&max8906->lock);
+
+	if (ret < 0)
+		return ret;
+
+	ret &= 0xff;
+	*dest = ret;
+	return 0;
+}
+
+static int max8906_i2c_device_update(struct max8906_data *max8906, u8 reg,
+				     u8 val, u8 mask)
+{
+	struct i2c_client *client = max8906->i2c_client;
+	int ret;
+
+	mutex_lock(&max8906->lock);
+
+	ret = i2c_smbus_read_byte_data(client, reg);
+	if (ret >= 0) {
+		u8 old_val = ret & 0xff;
+		u8 new_val = (val & mask) | (old_val & (~mask));
+		ret = i2c_smbus_write_byte_data(client, reg, new_val);
+		if (ret >= 0)
+			ret = 0;
+	}
+
+	mutex_unlock(&max8906->lock);
+
+	return ret;
+}
+
 
 max8906_register_type  max8906reg[ENDOFREG] =
 {
@@ -1237,7 +1294,7 @@ max8906_regulator_name_type regulator_name[NUMOFREG] =
     {  WBBCORE,  nWCRADE,           WCRENSRC,       WCREN      },
     {  WBBRF,    nWRFADE,           WRFENSRC,       WRFEN      },
     {  APPS,     nAPPSADE,          APPSENSRC,      APPSEN     },
-	{  IO,       nIOADE,            IOENSRC,        IOEN       },
+    {  IO,       nIOADE,            IOENSRC,        IOEN       },
     {  MEM,      nMEMADE,           MEMENSRC,       MEMEN      },
     {  WBBMEM,   nWMEMADE,          WMEMENSRC,      WMEMEN     },
     {  WBBIO,    nWIOADE,           WIOENSRC,       WIOEN      },
