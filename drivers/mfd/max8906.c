@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * This driver is based on max8906.c and max8997.c by 
+ * This driver is based on max8906.c and max8906.c by 
  *  Maxim Firmware Group (C) 2004 Maxim Integrated Products
  *  MyungJoo Ham <myungjoo.ham@samsung.com>
  */
@@ -30,14 +30,27 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-//#define pmic_extra_debug
-
 #ifdef PREFIX
 #undef PREFIX
 #endif
 #define PREFIX "MAX8906: "
+//#define PMIC_EXTRA_DEBUG
 
-#define MSG_HIGH(a,b,c,d)		{}
+#define MAX8906_RTC_ID	0xD0	/* Read Time Clock */
+#define MAX8906_ADC_ID	0x8E	/* ADC/Touchscreen */
+#define MAX8906_GPM_ID	0x78	/* General Power Management */
+#define MAX8906_APM_ID	0x68	/* APP Specific Power Management */
+
+#define I2C_ADDR_GPM	(MAX8906_GPM_ID >> 1)
+#define I2C_ADDR_APM	(MAX8906_APM_ID >> 1)
+#define I2C_ADDR_ADC	(MAX8906_ADC_ID >> 1)
+#define I2C_ADDR_RTC	(MAX8906_RTC_ID >> 1)
+
+static struct mfd_cell max8906_devs[] = {
+	{ .name = "max8906-pmic", },
+	{ .name = "max8906-rtc", },
+	{ .name = "max8906-battery", },
+};
 
 /*
  * Driver data
@@ -2262,10 +2275,6 @@ void MAX8906_PM_init(void)
 /*===================================================================================================================*/
 
 
-#define MAX8906_RTC_ID	0xD0	/* Read Time Clock */
-#define MAX8906_ADC_ID	0x8E	/* ADC/Touchscreen */
-#define MAX8906_GPM_ID	0x78	/* General Power Management */
-#define MAX8906_APM_ID	0x68	/* APP Specific Power Management */
 
 static struct i2c_driver max8906_driver;
 
@@ -2276,14 +2285,19 @@ static struct i2c_client *max8906_apm_i2c_client = NULL;
 
 static unsigned short max8906_normal_i2c[] = { I2C_CLIENT_END };
 static unsigned short max8906_ignore[] = { I2C_CLIENT_END };
-static unsigned short max8906_probe[] = { 3, (MAX8906_RTC_ID >> 1), 3, (MAX8906_ADC_ID >> 1),
-											3, (MAX8906_GPM_ID >> 1), 3, (MAX8906_APM_ID >> 1), I2C_CLIENT_END };
+static unsigned short max8906_probe[] = { 	3, (MAX8906_RTC_ID >> 1), 
+						3, (MAX8906_ADC_ID >> 1),
+						3, (MAX8906_GPM_ID >> 1), 
+						3, (MAX8906_APM_ID >> 1), 
+						I2C_CLIENT_END };
 
+/*
 static struct i2c_client_address_data max8906_addr_data = {
 	.normal_i2c = max8906_normal_i2c,
 	.ignore		= max8906_ignore,
 	.probe		= max8906_probe,
 };
+*/
 
 static int max8906_read(struct i2c_client *client, u8 reg, u8 *data)
 {
@@ -2339,7 +2353,7 @@ static int max8906_write(struct i2c_client *client, u8 reg, u8 data)
 unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 {
 	struct i2c_client *client;
-#ifdef pmic_extra_debug	
+#ifdef PMIC_EXTRA_DEBUG	
 	printk("%s -> slaveaddr 0x%02x, reg 0x%02x, data 0x%02x\n",	__FUNCTION__, slaveaddr, reg, *data);
 #endif	
 	if (slaveaddr == MAX8906_GPM_ID)
@@ -2354,7 +2368,7 @@ unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 		return PMIC_FAIL;
 
 	if (max8906_read(client, reg, data) < 0) { 
-#ifdef pmic_extra_debug	
+#ifdef PMIC_EXTRA_DEBUG	
 		printk(KERN_ERR "%s -> Failed! (slaveaddr 0x%02x, reg 0x%02x, data 0x%02x)\n",
 					__FUNCTION__, slaveaddr, reg, *data);
 #endif
@@ -2367,7 +2381,7 @@ unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 unsigned int pmic_write(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 {
 	struct i2c_client *client;
-#ifdef pmic_extra_debug	
+#ifdef PMIC_EXTRA_DEBUG	
 	printk("%s -> slaveaddr 0x%02x, reg 0x%02x, data 0x%02x\n",	__FUNCTION__, slaveaddr, reg, *data);
 #endif	
 	if (slaveaddr == MAX8906_GPM_ID)
@@ -2512,6 +2526,7 @@ void max8906_debug_print( void)
   /* Set_MAX8906_TSC_CONV_REG(VBUS_Measurement, NON_EN_REF_CONT); */
 }
 
+/*
 static int max8906_attach(struct i2c_adapter *adap, int addr, int kind)
 {
 	struct i2c_client *c;
@@ -2528,7 +2543,7 @@ static int max8906_attach(struct i2c_adapter *adap, int addr, int kind)
 	c->adapter = adap;
 	c->driver = &max8906_driver;
 
-#ifdef pmic_extra_debug	
+#ifdef PMIC_EXTRA_DEBUG	
 	printk("MAX8906: %s -> adapter: %s  slaveaddr: 0x%02x\n",	__FUNCTION__, c->name, addr);
 #endif	
 
@@ -2541,39 +2556,173 @@ static int max8906_attach(struct i2c_adapter *adap, int addr, int kind)
 		max8906_adc_i2c_client = c;
 	else if ((addr << 1) == MAX8906_GPM_ID)
 		max8906_gpm_i2c_client = c;
-	else /* (addr << 1) == MAX8906_APM_ID */
+	else // (addr << 1) == MAX8906_APM_ID 
 		max8906_apm_i2c_client = c;
 
 error:
-#ifdef pmic_extra_debug	
+#ifdef PMIC_EXTRA_DEBUG	
 	printk("%s -> return %i\n",	__FUNCTION__, ret);
 #endif	
 	return ret;
 }
+*/
 
-static int max8906_attach_adapter(struct i2c_adapter *adap)
+
+static int max8906_i2c_probe(struct i2c_client *i2c,
+			    const struct i2c_device_id *id)
 {
-	return i2c_probe(adap, &max8906_addr_data, max8906_attach);
+	struct max8906_dev *max8906;
+	struct max8906_platform_data *pdata = i2c->dev.platform_data;
+	int ret = 0;
+
+	max8906 = kzalloc(sizeof(struct max8906_dev), GFP_KERNEL);
+	if (max8906 == NULL)
+		return -ENOMEM;
+
+	i2c_set_clientdata(i2c, max8906);
+	max8906->dev = &i2c->dev;
+	max8906->i2c = i2c;
+	max8906->type = id->driver_data;
+
+	if (!pdata)
+		goto err;
+
+	max8906->wakeup = pdata->wakeup;
+
+	mutex_init(&max8906->iolock);
+
+	max8906->gpm = i2c_new_dummy(i2c->adapter, I2C_ADDR_GPM);
+	i2c_set_clientdata(max8906->gpm, max8906);
+	max8906->apm = i2c_new_dummy(i2c->adapter, I2C_ADDR_APM);
+	i2c_set_clientdata(max8906->apm, max8906);
+	max8906->adc = i2c_new_dummy(i2c->adapter, I2C_ADDR_ADC);
+	i2c_set_clientdata(max8906->adc, max8906);
+	max8906->rtc = i2c_new_dummy(i2c->adapter, I2C_ADDR_RTC);
+	i2c_set_clientdata(max8906->rtc, max8906);
+	pm_runtime_set_active(max8906->dev);
+
+	mfd_add_devices(max8906->dev, -1, max8906_devs,
+			ARRAY_SIZE(max8906_devs),
+			NULL, 0);
+
+	/*
+	 * TODO: enable others (flash, muic, rtc, battery, ...) and
+	 * check the return value
+	 */
+
+	if (ret < 0)
+		goto err_mfd;
+
+	return ret;
+
+err_mfd:
+	mfd_remove_devices(max8906->dev);
+	i2c_unregister_device(max8906->gpm);
+	i2c_unregister_device(max8906->apm);
+	i2c_unregister_device(max8906->adc);
+	i2c_unregister_device(max8906->rtc);
+
+
+err:
+	kfree(max8906);
+	return ret;
 }
 
-static int max8906_detach_client(struct i2c_client *client)
+static int max8906_i2c_remove(struct i2c_client *i2c)
 {
-	i2c_detach_client(client);
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+
+	mfd_remove_devices(max8906->dev);
+	i2c_unregister_device(max8906->gpm);
+	i2c_unregister_device(max8906->apm);
+	i2c_unregister_device(max8906->adc);
+	i2c_unregister_device(max8906->rtc);
+
+	kfree(max8906);
+
 	return 0;
 }
 
-static int max8906_command(struct i2c_client *client, unsigned int cmd, void *arg)
+static const struct i2c_device_id max8906_i2c_id[] = {
+	{ "max8906", TYPE_MAX8906 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, max8906_i2c_id);
+
+struct max8906_reg_dump {
+	u8	addr;
+	u8	val;
+};
+
+#define SAVE_ITEM(x)	{ .addr = (x), .val = 0x0, }
+static struct max8906_reg_dump max8906_dump[] = {
+//	SAVE_ITEM(MAX8906_REG_A),
+//	SAVE_ITEM(MAX8906_REG_B)
+};
+
+/* Save registers before hibernation */
+static int max8906_freeze(struct device *dev)
 {
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+	int i;
+// TODO: implement register dump
+/*
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_pmic); i++)
+		max8906_read_reg(i2c, max8906_dumpaddr_pmic[i],
+				&max8906->reg_dump[i]);
+
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_muic); i++)
+		max8906_read_reg(i2c, max8906_dumpaddr_muic[i],
+				&max8906->reg_dump[i + MAX8906_REG_PMIC_END]);
+
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_haptic); i++)
+		max8906_read_reg(i2c, max8906_dumpaddr_haptic[i],
+				&max8906->reg_dump[i + MAX8906_REG_PMIC_END +
+				max8906_MUIC_REG_END]);
+*/
 	return 0;
 }
+
+/* Restore registers after hibernation */
+static int max8906_restore(struct device *dev)
+{
+	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+	int i;
+// TODO: implement register restore
+/*
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_pmic); i++)
+		max8906_write_reg(i2c, max8906_dumpaddr_pmic[i],
+				max8906->reg_dump[i]);
+
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_muic); i++)
+		max8906_write_reg(i2c, max8906_dumpaddr_muic[i],
+				max8906->reg_dump[i + MAX8906_REG_PMIC_END]);
+
+	for (i = 0; i < ARRAY_SIZE(max8906_dumpaddr_haptic); i++)
+		max8906_write_reg(i2c, max8906_dumpaddr_haptic[i],
+				max8906->reg_dump[i + MAX8906_REG_PMIC_END +
+				max8906_MUIC_REG_END]);
+*/
+	return 0;
+}
+
+const struct dev_pm_ops max8906_pm = {
+// TODO: add suspend and resume like in max8998 driver
+	.freeze = max8906_freeze,
+	.restore = max8906_restore,
+};
 
 static struct i2c_driver max8906_driver = {
 	.driver = {
 		.name = "max8906",
+		.owner = THIS_MODULE,
+		.pm = &max8906_pm,
 	},
-	.attach_adapter = max8906_attach_adapter,
-	.detach_client = max8906_detach_client,
-	.command = max8906_command
+	.probe = max8906_i2c_probe,
+	.remove = max8906_i2c_remove,
+	.id_table = max8906_i2c_id,
 };
 
 static int pmic_init_status = 0;

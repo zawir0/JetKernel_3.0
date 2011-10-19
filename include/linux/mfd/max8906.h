@@ -82,6 +82,7 @@ struct max8906_regulator_data {
  * @lbhyst: Low Main-Battery Comparator Hysteresis register value
  * @lbth: Low Main-Battery threshold voltage register value
  * @lben: Enable Low Main-Battery alarm signal
+ * @wakeup: Allow to wake up from suspend
  */
 struct max8906_platform_data {
 	int				num_regulators;
@@ -89,6 +90,8 @@ struct max8906_platform_data {
 	unsigned int lbhyst;
 	unsigned int lbth;
 	unsigned int lben;
+
+	bool	wakeup;
 };
 
 #endif /* _MAX8906_H_ */

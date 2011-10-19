@@ -27,8 +27,7 @@
 
 #include <linux/i2c.h>
 
-
-
+#define MAX8906_NUM_IRQ_REGS	4
 
 #define TRUE   1   /* Boolean true value. */
 #define FALSE  0   /* Boolean false value. */
@@ -36,7 +35,7 @@
 #define NULL   0
 #endif
 
-#if !defined(CONFIG_PMIC_MAX8906) && !defined(CONFIG_PMIC_MAX8698)  // dgahn
+#if !defined(CONFIG_PMIC_MAX8906)  // dgahn
 typedef  unsigned char      boolean;     /* Boolean value type. */
 
 typedef  unsigned long int  uint32;      /* Unsigned 32 bit value */
@@ -67,6 +66,44 @@ typedef  signed short      sint15;       /* Signed 16 bit value */
 typedef  signed char       sint7;        /* Signed 8  bit value */
 #endif
 
+
+
+enum {
+	TYPE_MAX8906 = 0 /* Default */
+};
+
+/**
+ * struct max8906_dev - max8906 master device for sub-drivers
+ * @dev: master device of the chip (can be used to access platform data)
+ * @i2c: i2c client private data for regulator
+ * @rtc: i2c client private data for rtc
+ * @iolock: mutex for serializing io access
+ * @irqlock: mutex for buslock
+ * @irq_base: base IRQ number for max8906, required for IRQs
+ * @irq: generic IRQ number for max8906
+ * @ono: power onoff IRQ number for max8906
+ * @irq_masks_cur: currently active value
+ * @irq_masks_cache: cached hardware value
+ * @type: indicate which max8906 "variant" is used
+ */
+struct max8906_dev {
+	struct device *dev;
+	struct i2c_client *i2c;
+	struct i2c_client *gpm;
+	struct i2c_client *apm;
+	struct i2c_client *adc;
+	struct i2c_client *rtc;
+	struct mutex iolock;
+	struct mutex irqlock;
+
+	int irq_base;
+	int irq;
+	int ono;
+	u8 irq_masks_cur[MAX8906_NUM_IRQ_REGS];
+	u8 irq_masks_cache[MAX8906_NUM_IRQ_REGS];
+	int type;
+	bool wakeup;
+};
 
 
 
