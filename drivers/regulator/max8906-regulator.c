@@ -38,7 +38,7 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-
+extern int max8906_i2c_device_update(struct max8906_data*, u8, u8, u8);
 /*
  * Voltage regulator
  */
@@ -454,11 +454,12 @@ static struct regulator_desc regulators[] = {
 		.owner		= THIS_MODULE,
 	},
 };
+*/
 
 /*
  * I2C driver
  */
-
+/*
 static int max8906_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {

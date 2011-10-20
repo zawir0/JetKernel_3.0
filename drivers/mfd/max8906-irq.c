@@ -27,9 +27,11 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
+extern max8906_register_type  max8906reg[ENDOFREG];
+extern max8906_function_type  max8906pm[ENDOFPM];
+extern max8906_regulator_name_type regulator_name[NUMOFREG];
 
-
-
+#define MSG_HIGH(a,b,c,d)
 
 
 max8906_irq_mask_type max8906_irq_init_array[NUMOFIRQ] = {

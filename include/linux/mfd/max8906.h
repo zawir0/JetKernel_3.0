@@ -28,6 +28,19 @@
 #ifndef _MAX8906_H_
 #define _MAX8906_H_
 
+/*
+ * Driver data
+ */
+
+struct max8906_data {
+	struct device		*dev;
+	struct i2c_client	*i2c_client;
+	int			num_regulators;
+	struct regulator_dev	**rdev;
+	struct mutex		lock;
+	int			ramp_rate;
+};
+
 enum {
 	// Linear Regulators (LDOs)
 	MAX8906_WBBCORE,
