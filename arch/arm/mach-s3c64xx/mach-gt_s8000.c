@@ -354,7 +354,7 @@ static struct i2c_gpio_platform_data jet_pmic_i2c_pdata = {
 	.udelay			= 2, /* 250KHz */
 };
 
-static struct platform_device spica_pmic_i2c = {
+static struct platform_device jet_pmic_i2c = {
 	.name			= "i2c-gpio",
 	.id			= 2,
 	.dev.platform_data	= &jet_pmic_i2c_pdata,
@@ -1902,7 +1902,7 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_android_usb,
 	&s3c_device_onenand,
 	&samsung_device_keypad,
-	&spica_pmic_i2c,
+	&jet_pmic_i2c,
 	&spica_audio_i2c,
 	&spica_touch_i2c,
 	&spica_s6d05a,
@@ -2505,7 +2505,7 @@ static void __init spica_machine_init(void)
 	s3c_i2c1_set_platdata(&spica_cam_i2c);
 	i2c_register_board_info(spica_cam_i2c.bus_num, spica_cam_i2c_devs,
 					ARRAY_SIZE(spica_cam_i2c_devs));
-	i2c_register_board_info(spica_pmic_i2c.id, jet_pmic_i2c_devs,
+	i2c_register_board_info(jet_pmic_i2c.id, jet_pmic_i2c_devs,
 					ARRAY_SIZE(jet_pmic_i2c_devs));
 	i2c_register_board_info(spica_audio_i2c.id, spica_audio_i2c_devs,
 					ARRAY_SIZE(spica_audio_i2c_devs));

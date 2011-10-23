@@ -1487,7 +1487,7 @@ const struct dev_pm_ops max8906_pm = {
 	.restore = max8906_restore,
 };
 
-static struct i2c_driver max8906_driver = {
+static struct i2c_driver max8906_i2c_driver = {
 	.driver = {
 		.name = "max8906",
 		.owner = THIS_MODULE,
@@ -1504,7 +1504,7 @@ int is_pmic_initialized(void)
 	return pmic_init_status;
 }
 
-static int __init max8906_init(void)
+static int __init max8906_i2c_init(void)
 {
 	int ret;
 	ret = i2c_add_driver(&max8906_driver);
@@ -1516,16 +1516,18 @@ static int __init max8906_init(void)
 	return ret;
 }
 
-static void __exit max8906_exit(void)
+/* init early so consumer devices can complete system boot */
+subsys_initcall(max8906_i2c_init);
+
+static void __exit max8906_i2c_exit(void)
 {
-	i2c_del_driver(&max8906_driver);
+	i2c_del_driver(&max8906_i2c_driver);
 	pmic_init_status = 0;
 }
 
+module_exit(max8906_i2c_exit);
+module_init(max8906_i2c_init);
 
-
-module_init(max8906_init);
-module_exit(max8906_exit);
 
 MODULE_DESCRIPTION("MAXIM 8906 multi-function core driver");
 MODULE_AUTHOR("dopi <dopi711@googlemail.com>");
