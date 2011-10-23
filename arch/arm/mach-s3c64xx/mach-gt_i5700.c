@@ -838,9 +838,8 @@ static struct platform_device spica_s6d05a = {
 
 static struct s3c_sdhci_platdata spica_hsmmc0_pdata = {
 	.max_width		= 4,
-	.host_caps		= MMC_CAP_4_BIT_DATA |
-				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
-				MMC_CAP_DISABLE,
+	.host_caps		= MMC_CAP_4_BIT_DATA
+				| MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
 	.cd_type		= S3C_SDHCI_CD_GPIO,
 	.ext_cd_gpio		= GPIO_TF_DETECT,
 	.ext_cd_gpio_invert	= 1,
@@ -870,12 +869,12 @@ static int spica_wlan_cd_cleanup(void (*notify_func)(struct platform_device *,
 
 static struct s3c_sdhci_platdata spica_hsmmc2_pdata = {
 	.max_width		= 4,
-	.host_caps		= MMC_CAP_4_BIT_DATA |
-				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
-				MMC_CAP_DISABLE,
+	.host_caps		= MMC_CAP_4_BIT_DATA
+				| MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
 	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
 	.ext_cd_init		= spica_wlan_cd_init,
 	.ext_cd_cleanup		= spica_wlan_cd_cleanup,
+	.built_in		= 1,
 };
 
 static struct regulator_consumer_supply mmc2_supplies[] = {
@@ -1408,7 +1407,6 @@ static int spica_wlan_set_power(int val)
 		return 0;
 
 	if (val) {
-		wake_lock(&wlan_wakelock);
 		gpio_set_value(GPIO_WLAN_RST_N, 0);
 		spica_wifi_bt_power_inc();
 		msleep(150);
@@ -1418,7 +1416,6 @@ static int spica_wlan_set_power(int val)
 		s3c_gpio_setpull(GPIO_WLAN_HOST_WAKE, S3C_GPIO_PULL_DOWN);
 		gpio_set_value(GPIO_WLAN_RST_N, 0);
 		spica_wifi_bt_power_dec();
-		wake_unlock(&wlan_wakelock);
 	}
 
 	spica_wlan_power = val;
