@@ -1049,13 +1049,14 @@ void MAX8906_PM_init(void)
 
 
 
-static struct i2c_driver max8906_driver;
+static struct i2c_driver max8906_i2c_driver;
 
 static struct i2c_client *max8906_rtc_i2c_client = NULL;
 static struct i2c_client *max8906_adc_i2c_client = NULL;
 static struct i2c_client *max8906_gpm_i2c_client = NULL;
 static struct i2c_client *max8906_apm_i2c_client = NULL;
 
+/*
 static unsigned short max8906_normal_i2c[] = { I2C_CLIENT_END };
 static unsigned short max8906_ignore[] = { I2C_CLIENT_END };
 static unsigned short max8906_probe[] = { 	3, (MAX8906_RTC_ID >> 1), 
@@ -1063,7 +1064,7 @@ static unsigned short max8906_probe[] = { 	3, (MAX8906_RTC_ID >> 1),
 						3, (MAX8906_GPM_ID >> 1), 
 						3, (MAX8906_APM_ID >> 1), 
 						I2C_CLIENT_END };
-
+*/
 /*
 static struct i2c_client_address_data max8906_addr_data = {
 	.normal_i2c = max8906_normal_i2c,
@@ -1299,48 +1300,6 @@ void max8906_debug_print( void)
   /* Set_MAX8906_TSC_CONV_REG(VBUS_Measurement, NON_EN_REF_CONT); */
 }
 
-/*
-static int max8906_attach(struct i2c_adapter *adap, int addr, int kind)
-{
-	struct i2c_client *c;
-	int ret;
-
-	c = kmalloc(sizeof(*c), GFP_KERNEL);
-	if (!c)
-		return -ENOMEM;
-
-	memset(c, 0, sizeof(struct i2c_client));	
-
-	strcpy(c->name, max8906_driver.driver.name);
-	c->addr = addr;
-	c->adapter = adap;
-	c->driver = &max8906_driver;
-
-#ifdef PMIC_EXTRA_DEBUG	
-	printk("MAX8906: %s -> adapter: %s  slaveaddr: 0x%02x\n",	__FUNCTION__, c->name, addr);
-#endif	
-
-	if ((ret = i2c_attach_client(c)))
-		goto error;
-
-	if ((addr << 1) == MAX8906_RTC_ID)
-		max8906_rtc_i2c_client = c;
-	else if ((addr << 1) == MAX8906_ADC_ID)
-		max8906_adc_i2c_client = c;
-	else if ((addr << 1) == MAX8906_GPM_ID)
-		max8906_gpm_i2c_client = c;
-	else // (addr << 1) == MAX8906_APM_ID 
-		max8906_apm_i2c_client = c;
-
-error:
-#ifdef PMIC_EXTRA_DEBUG	
-	printk("%s -> return %i\n",	__FUNCTION__, ret);
-#endif	
-	return ret;
-}
-*/
-
-
 static int max8906_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
@@ -1398,6 +1357,9 @@ err_mfd:
 
 err:
 	kfree(max8906);
+#ifdef PMIC_EXTRA_DEBUG	
+	printk("%s -> return %i\n",	__FUNCTION__, ret);
+#endif	
 	return ret;
 }
 
@@ -1507,7 +1469,7 @@ int is_pmic_initialized(void)
 static int __init max8906_i2c_init(void)
 {
 	int ret;
-	ret = i2c_add_driver(&max8906_driver);
+	ret = i2c_add_driver(&max8906_i2c_driver);
 	printk("MAX8906: %s retval = %d\n",__FUNCTION__,ret);
 	pmic_init_status = 1;
 
@@ -1525,8 +1487,8 @@ static void __exit max8906_i2c_exit(void)
 	pmic_init_status = 0;
 }
 
+//module_init(max8906_i2c_init);
 module_exit(max8906_i2c_exit);
-module_init(max8906_i2c_init);
 
 
 MODULE_DESCRIPTION("MAXIM 8906 multi-function core driver");
