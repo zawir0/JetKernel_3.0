@@ -291,7 +291,7 @@ max8906_register_type  max8906reg[ENDOFREG] =
     {  0x68,        0x8F }, // REG_II2RR,
     {  0x78,        0x98 } // REG_IRQ_STAT,
 };
-
+EXPORT_SYMBOL(max8906reg);
 
 max8906_function_type  max8906pm[ENDOFPM] =
 {

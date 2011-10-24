@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * this driver is based on max8698.c, max8997.c and max8998.c by 
+ * this driver is based on max8698.c, max8997.c and max8906.c by 
  * Tomasz Figa <tomasz.figa at gmail.com>, 
  * MyungJoo Ham <myungjoo.ham@smasung.com>,
  * Kyungmin Park <kyungmin.park@samsung.com>
@@ -38,10 +38,26 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
+extern max8906_register_type  max8906reg[ENDOFREG];
+extern max8906_function_type  max8906pm[ENDOFPM];
+extern max8906_regulator_name_type regulator_name[NUMOFREG];
 extern int max8906_i2c_device_update(struct max8906_data*, u8, u8, u8);
+
 /*
  * Voltage regulator
  */
+
+struct max8906reg_data {
+	struct device		*dev;
+	struct max8906_dev	*iodev;
+	int			num_regulators;
+	struct regulator_dev	**rdev;
+	u8                      buck1_vol[4]; /* voltages for selection */
+	u8                      buck2_vol[2];
+	unsigned int		buck1_idx; /* index to last changed voltage */
+					   /* value in a set */
+	unsigned int		buck2_idx;
+};
 
 struct voltage_map_desc {
 	int min;
@@ -153,7 +169,7 @@ static int max8906_get_enable_register(struct regulator_dev *rdev,
 
 static int max8906_ldo_is_enabled(struct regulator_dev *rdev)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	int ret, reg, shift = 8;
 	u8 val;
 
@@ -170,7 +186,7 @@ static int max8906_ldo_is_enabled(struct regulator_dev *rdev)
 
 static int max8906_ldo_enable(struct regulator_dev *rdev)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	int reg, shift = 8, ret;
 
 	ret = max8906_get_enable_register(rdev, &reg, &shift);
@@ -182,7 +198,7 @@ static int max8906_ldo_enable(struct regulator_dev *rdev)
 
 static int max8906_ldo_disable(struct regulator_dev *rdev)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	int reg, shift = 8, ret;
 
 	ret = max8906_get_enable_register(rdev, &reg, &shift);
@@ -240,7 +256,7 @@ static int max8906_get_voltage_register(struct regulator_dev *rdev,
 
 static int max8906_get_voltage(struct regulator_dev *rdev)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	int reg, shift = 0, mask, ret;
 	u8 val;
 
@@ -261,7 +277,7 @@ static int max8906_get_voltage(struct regulator_dev *rdev)
 static int max8906_set_voltage(struct regulator_dev *rdev,
 				int min_uV, int max_uV, unsigned *selector)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	const struct voltage_map_desc *desc;
 	int ldo = max8906_get_ldo(rdev);
 	int reg = 0, shift = 0, mask = 0, ret;
@@ -311,7 +327,7 @@ static struct regulator_ops max8906_regulator_ops = {
 static int max8906_set_buck12_voltage(struct regulator_dev *rdev,
 				int min_uV, int max_uV, unsigned *selector)
 {
-	struct max8906_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
 	const struct voltage_map_desc *desc;
 	int prev_uV, sel_uV;
 	int ldo = max8906_get_ldo(rdev), i = 0, ret;
@@ -457,24 +473,24 @@ static struct regulator_desc regulators[] = {
 */
 
 /*
- * I2C driver
+ * platform driver
  */
-/*
-static int max8906_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
+
+static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 {
-	struct max8906_platform_data *pdata = dev_get_platdata(&i2c->dev);
+	struct max8906_dev *iodev = dev_get_drvdata(pdev->dev.parent);
+	struct max8906_platform_data *pdata = dev_get_platdata(iodev->dev);
 	struct regulator_dev **rdev;
-	struct max8906_data *max8906;
+	struct max8906reg_data *max8906;
+	struct i2c_client *i2c;
 	int i, ret, size;
-	u8 val;
 
 	if (!pdata) {
-		dev_err(&i2c->dev, "No platform init data supplied\n");
+		dev_err(pdev->dev.parent, "No platform init data supplied\n");
 		return -ENODEV;
 	}
 
-	max8906 = kzalloc(sizeof(struct max8906_data), GFP_KERNEL);
+	max8906 = kzalloc(sizeof(struct max8906reg_data), GFP_KERNEL);
 	if (!max8906)
 		return -ENOMEM;
 
@@ -485,38 +501,151 @@ static int max8906_probe(struct i2c_client *i2c,
 		return -ENOMEM;
 	}
 
-	mutex_init(&max8906->lock);
 	rdev = max8906->rdev;
-	max8906->dev = &i2c->dev;
-	max8906->i2c_client = i2c;
+	max8906->dev = &pdev->dev;
+	max8906->iodev = iodev;
 	max8906->num_regulators = pdata->num_regulators;
-	i2c_set_clientdata(i2c, max8906);
+	platform_set_drvdata(pdev, max8906);
+	i2c = max8906->iodev->i2c;
 
-	if (pdata->lben)
-		max8906_i2c_device_update(max8906, MAX8906_REG_LBCNFG,
-			(pdata->lbhyst & 3) << 4 | (pdata->lbth & 7) << 1,
-			0x3e);
-	max8906_i2c_device_update(max8906, MAX8906_REG_ONOFF2,
-							(!!pdata->lben), 0x01);
+//	max8906->buck1_idx = pdata->buck1_default_idx;
+//	max8906->buck2_idx = pdata->buck2_default_idx;
 
-	ret = max8906_i2c_device_read(max8906, MAX8906_REG_ADISCHG_EN2, &val);
-	if (ret)
-		goto err;
-	max8906->ramp_rate = 1000*((val & 0xf) + 1);
+	/* NOTE: */
+	/* For unused GPIO NOT marked as -1 (thereof equal to 0)  WARN_ON */
+	/* will be displayed */
+
+	/* Check if MAX8906 voltage selection GPIOs are defined */
+//	if (gpio_is_valid(pdata->buck1_set1) &&
+//	    gpio_is_valid(pdata->buck1_set2)) {
+		/* Check if SET1 is not equal to 0 */
+//		if (!pdata->buck1_set1) {
+//			printk(KERN_ERR "MAX8906 SET1 GPIO defined as 0 !\n");
+//			WARN_ON(!pdata->buck1_set1);
+//			ret = -EIO;
+//			goto err_free_mem;
+//		}
+		/* Check if SET2 is not equal to 0 */
+/*
+		if (!pdata->buck1_set2) {
+			printk(KERN_ERR "MAX8906 SET2 GPIO defined as 0 !\n");
+			WARN_ON(!pdata->buck1_set2);
+			ret = -EIO;
+			goto err_free_mem;
+		}
+
+		gpio_request(pdata->buck1_set1, "MAX8906 BUCK1_SET1");
+		gpio_direction_output(pdata->buck1_set1,
+				      max8906->buck1_idx & 0x1);
+
+
+		gpio_request(pdata->buck1_set2, "MAX8906 BUCK1_SET2");
+		gpio_direction_output(pdata->buck1_set2,
+				      (max8906->buck1_idx >> 1) & 0x1);
+*/
+		/* Set predefined value for BUCK1 register 1 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck1_voltage1 / 1000))
+			i++;
+		max8906->buck1_vol[0] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE1, i);
+		if (ret)
+			goto err_free_mem;
+*/
+		/* Set predefined value for BUCK1 register 2 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck1_voltage2 / 1000))
+			i++;
+
+		max8906->buck1_vol[1] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE2, i);
+		if (ret)
+			goto err_free_mem;
+*/
+		/* Set predefined value for BUCK1 register 3 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck1_voltage3 / 1000))
+			i++;
+
+		max8906->buck1_vol[2] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE3, i);
+		if (ret)
+			goto err_free_mem;
+*/
+		/* Set predefined value for BUCK1 register 4 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck1_voltage4 / 1000))
+			i++;
+
+		max8906->buck1_vol[3] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE4, i);
+		if (ret)
+			goto err_free_mem;
+
+	}
+*/
+//	if (gpio_is_valid(pdata->buck2_set3)) {
+		/* Check if SET3 is not equal to 0 */
+/*
+		if (!pdata->buck2_set3) {
+			printk(KERN_ERR "MAX8906 SET3 GPIO defined as 0 !\n");
+			WARN_ON(!pdata->buck2_set3);
+			ret = -EIO;
+			goto err_free_mem;
+		}
+		gpio_request(pdata->buck2_set3, "MAX8906 BUCK2_SET3");
+		gpio_direction_output(pdata->buck2_set3,
+				      max8906->buck2_idx & 0x1);
+*/
+		/* BUCK2 register 1 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck2_voltage1 / 1000))
+			i++;
+		max8906->buck2_vol[0] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE1, i);
+		if (ret)
+			goto err_free_mem;
+*/
+		/* BUCK2 register 2 */
+/*
+		i = 0;
+		while (buck12_voltage_map_desc.min +
+		       buck12_voltage_map_desc.step*i
+		       < (pdata->buck2_voltage2 / 1000))
+			i++;
+		printk(KERN_ERR "i2:%d, buck2_idx:%d\n", i, max8906->buck2_idx);
+		max8906->buck2_vol[1] = i;
+		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE2, i);
+		if (ret)
+			goto err_free_mem;
+	}
 
 	for (i = 0; i < pdata->num_regulators; i++) {
 		const struct voltage_map_desc *desc;
 		int id = pdata->regulators[i].id;
-
-		if (id >= ARRAY_SIZE(regulators))
-			continue;
+		int index = id - MAX8906_LDO2;
 
 		desc = ldo_voltage_map[id];
-		if (desc) {
+		if (desc && regulators[index].ops != &max8906_others_ops) {
 			int count = (desc->max - desc->min) / desc->step + 1;
-			regulators[id].n_voltages = count;
+			regulators[index].n_voltages = count;
 		}
-		rdev[i] = regulator_register(&regulators[id], max8906->dev,
+		rdev[i] = regulator_register(&regulators[index], max8906->dev,
 				pdata->regulators[i].initdata, max8906);
 		if (IS_ERR(rdev[i])) {
 			ret = PTR_ERR(rdev[i]);
@@ -525,6 +654,7 @@ static int max8906_probe(struct i2c_client *i2c,
 			goto err;
 		}
 	}
+*/
 
 	return 0;
 err:
@@ -532,15 +662,16 @@ err:
 		if (rdev[i])
 			regulator_unregister(rdev[i]);
 
+err_free_mem:
 	kfree(max8906->rdev);
 	kfree(max8906);
 
 	return ret;
 }
 
-static int __devexit max8906_remove(struct i2c_client *i2c)
+static int __devexit max8906_pmic_remove(struct platform_device *pdev)
 {
-	struct max8906_data *max8906 = i2c_get_clientdata(i2c);
+	struct max8906reg_data *max8906 = platform_get_drvdata(pdev);
 	struct regulator_dev **rdev = max8906->rdev;
 	int i;
 
@@ -554,34 +685,33 @@ static int __devexit max8906_remove(struct i2c_client *i2c)
 	return 0;
 }
 
-static const struct i2c_device_id max8906_i2c_id[] = {
-       { "max8906", 0 },
-       { }
+static const struct platform_device_id max8906_pmic_id[] = {
+	{ "max8906-pmic", TYPE_MAX8906 },
+	{ }
 };
-MODULE_DEVICE_TABLE(i2c, max8906_i2c_id);
+MODULE_DEVICE_TABLE(platform, max8906_pmic_id);
 
-static struct i2c_driver max8906_i2c_driver = {
+static struct platform_driver max8906_pmic_driver = {
 	.driver = {
-		   .name = "max8906",
-		   .owner = THIS_MODULE,
+		.name = "max8906-pmic",
+		.owner = THIS_MODULE,
 	},
-	.probe = max8906_probe,
-	.remove = max8906_remove,
-	.id_table = max8906_i2c_id,
+	.probe = max8906_pmic_probe,
+	.remove = __devexit_p(max8906_pmic_remove),
+	.id_table = max8906_pmic_id,
 };
 
-static int __init max8906_init(void)
+static int __init max8906_pmic_init(void)
 {
-	return i2c_add_driver(&max8906_i2c_driver);
+	return platform_driver_register(&max8906_pmic_driver);
 }
-subsys_initcall(max8906_init);
+subsys_initcall(max8906_pmic_init);
 
-static void __exit max8906_exit(void)
+static void __exit max8906_pmic_cleanup(void)
 {
-	i2c_del_driver(&max8906_i2c_driver);
+	platform_driver_unregister(&max8906_pmic_driver);
 }
-module_exit(max8906_exit);
-*/
+module_exit(max8906_pmic_cleanup);
 
 MODULE_DESCRIPTION("Maxim 8906 voltage regulator driver");
 MODULE_AUTHOR("Dopi <dopi711 at googlemail.com>");

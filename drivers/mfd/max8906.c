@@ -1323,13 +1323,17 @@ static int max8906_i2c_probe(struct i2c_client *i2c,
 
 	mutex_init(&max8906->iolock);
 
-	max8906->gpm = i2c_new_dummy(i2c->adapter, I2C_ADDR_GPM);
+	max8906_gpm_i2c_client = i2c_new_dummy(i2c->adapter, I2C_ADDR_GPM);
+	max8906->gpm = max8906_gpm_i2c_client;
 	i2c_set_clientdata(max8906->gpm, max8906);
-	max8906->apm = i2c_new_dummy(i2c->adapter, I2C_ADDR_APM);
+	max8906_apm_i2c_client = i2c_new_dummy(i2c->adapter, I2C_ADDR_APM);
+	max8906->apm = max8906_apm_i2c_client;
 	i2c_set_clientdata(max8906->apm, max8906);
-	max8906->adc = i2c_new_dummy(i2c->adapter, I2C_ADDR_ADC);
+	max8906_adc_i2c_client = i2c_new_dummy(i2c->adapter, I2C_ADDR_ADC);
+	max8906->adc = max8906_adc_i2c_client;
 	i2c_set_clientdata(max8906->adc, max8906);
-	max8906->rtc = i2c_new_dummy(i2c->adapter, I2C_ADDR_RTC);
+	max8906_rtc_i2c_client = i2c_new_dummy(i2c->adapter, I2C_ADDR_RTC);
+	max8906->rtc = max8906_rtc_i2c_client;
 	i2c_set_clientdata(max8906->rtc, max8906);
 	pm_runtime_set_active(max8906->dev);
 
