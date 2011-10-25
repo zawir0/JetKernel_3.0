@@ -43,6 +43,936 @@ extern max8906_function_type  max8906pm[ENDOFPM];
 extern max8906_regulator_name_type regulator_name[NUMOFREG];
 extern int max8906_i2c_device_update(struct max8906_data*, u8, u8, u8);
 
+extern unsigned int pmic_read(u8, u8, u8*, u8);
+extern unsigned int pmic_write(u8, u8, u8*, u8);
+
+#ifdef PREFIX
+#undef PREFIX
+#endif
+#define PREFIX "MAX8906: "
+//#define PMIC_EXTRA_DEBUG
+
+
+
+
+/*===========================================================================
+
+      P O W E R     M A N A G E M E N T     S E C T I O N
+
+  ===========================================================================*/
+
+
+/*===========================================================================
+
+      I N I T    R O U T I N E
+
+===========================================================================*/
+/*===========================================================================
+
+FUNCTION MAX8906_PM_init
+
+DESCRIPTION
+    When power up, MAX8906_PM_init will initialize the MAX8906 for each part
+
+INPUT PARAMETERS
+
+RETURN VALUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+void MAX8906_PM_init(void)
+{
+    // Set the LDO voltage
+    // When PWRSL is connected to GND, the default voltage of MAX8906 is like this.
+    // LDO1 = 2.6V    LDO2  = 2.6V   LDO3 = 2.85V   LDO4 = 2.85V
+    // LDO5 = 2.85V    LDO6  = 2.85V  LDO7 = 2.85V   LDO8 = 2.85V
+    // LDO9 = 2.85V   LDO10 = 2.85V  LDO11 = 1.8V   LDO14 = 2.80V
+
+    // Set the LDO on/off function
+    // the default value for MAX8906
+    // SD1   = On   SD2   = On   SD3  = Off  LDO1  = On   LDO2   = On
+    // LDO3  = Off  LDO4  = Off  LDO5 = Off  LDO6  = Off  LDO7   = Off
+    // LDO8  = Off  LDO9 = Off  LDO10 = Off  LDO11 = Off  LDO12  = Off
+    // LDO11 = Off  LDO12 = On  LDO13 = Off  LDO14 = Off  REFOUT = On 
+
+     // if you use USB transceiver, Connect internal 1.5k pullup resistor.
+     //Set_MAX8906_PM_USB_CNTL(USB_PU_EN,1);
+     // enable SMPL function
+     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_SMPL, (byte)1);
+     // enable WTSR function for soft reset
+     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_WTSR, (byte)1);
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_REG                                
+
+DESCRIPTION
+    This function write the value at the selected register in the PM section.
+
+INPUT PARAMETERS
+    reg_num :   selected register in the register address.
+    value   :   the value for reg_num.
+                This is aligned to the right side of the return value
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+    Set_MAX8906_PM_REG(CHGENB, onoff);
+
+===========================================================================*/
+boolean Set_MAX8906_PM_REG(max8906_pm_function_type reg_num, byte value)
+{
+    byte reg_buff;
+
+    if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
+    {
+        // Register Read command failed
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "read from slave_add 0x%x, reg 0x%x failed = 0x%x \n", __func__, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, reg_buff);
+#endif
+        return FALSE;
+    }
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "read from slave_add 0x%x, reg 0x%x succeeded = 0x%x \n", __func__, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, reg_buff);
+#endif
+
+    reg_buff = (reg_buff & max8906pm[reg_num].clear) | (value << max8906pm[reg_num].shift);
+    if(pmic_write(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
+    {
+        // Register Write command failed
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "write (0x%x) to slave_add 0x%x, reg 0x%x failed \n", __func__, reg:buff, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr);
+#endif
+        return FALSE;
+    }
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "write (0x%x) to slave_add 0x%x, reg 0x%x succeeded \n", __func__, reg:buff, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr);
+#endif
+    return TRUE;
+}
+
+/*===========================================================================
+
+FUNCTION Get_MAX8906_PM_REG                                
+
+DESCRIPTION
+    This function read the value at the selected register in the PM section.
+
+INPUT PARAMETERS
+    reg_num :   selected register in the register address.
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+    reg_buff :  the value of selected register.
+                reg_buff is aligned to the right side of the return value.
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Get_MAX8906_PM_REG(max8906_pm_function_type reg_num, byte *reg_buff)
+{
+    byte temp_buff;
+
+    if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &temp_buff, (byte)1) != PMIC_PASS)
+    {
+        // Register Read Command failed
+        return FALSE;
+    }
+
+    *reg_buff = (temp_buff & max8906pm[reg_num].mask) >> max8906pm[reg_num].shift;
+
+    return TRUE;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_ADDR                                
+
+DESCRIPTION
+    This function write the value at the selected register address
+    in the PM section.
+
+INPUT PARAMETERS
+    max8906_pm_register_type reg_addr    : the register address.
+    byte *reg_buff   : the array for data of register to write.
+ 	byte length      : the number of the register 
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Set_MAX8906_PM_ADDR(max8906_pm_register_type reg_addr, byte *reg_buff, byte length)
+{
+
+    if(pmic_write(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
+    {
+        // Register Write command failed
+        return FALSE;
+    }
+    return TRUE;
+
+}
+
+
+/*===========================================================================
+
+FUNCTION Get_MAX8906_PM_ADDR                                
+
+DESCRIPTION
+    This function read the value at the selected register address
+    in the PM section.
+
+INPUT PARAMETERS
+    max8906_pm_register_type reg_addr   : the register address.
+    byte *reg_buff  : the array for data of register to write.
+ 	byte length     : the number of the register 
+
+RETURN VALUE
+    byte *reg_buff : the pointer parameter for data of sequential registers
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Get_MAX8906_PM_ADDR(max8906_pm_register_type reg_addr, byte *reg_buff, byte length)
+{
+    if(reg_addr > ENDOFREG)
+    {
+        // Invalid Read Register
+        return FALSE; // return error;
+    }
+    if(pmic_read(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
+    {
+        // Register Read command failed
+        return FALSE;
+    }
+    return TRUE;
+}
+
+
+
+
+/*===========================================================================*/
+
+
+/* MAX8906 arm voltage table */
+static const unsigned int arm_voltage_table[61] = {
+	725, 750, 775, 800, 825, 850, 875, 900,		/* 0 ~ 7 */
+	925, 950, 975, 1000, 1025, 1050, 1075, 1100,	/* 8 ~ 15 */
+	1125, 1150, 1175, 1200, 1225, 1250, 1275, 1300,	/* 16 ~ 23 */
+	1325, 1350, 1375, 1400, 1425, 1450, 1475, 1500,	/* 24 ~ 31 */
+	1525, 1550, 1575, 1600, 1625, 1650, 1675, 1700,	/* 32 ~ 39 */
+	1725, 1750, 1775, 1800, 1825, 1850, 1875, 1900,	/* 40 ~ 47 */
+	1925, 1950, 1975, 2000, 2025, 2050, 2075, 2100,	/* 48 ~ 55 */
+	2125, 2150, 2175, 2200, 2225,			/* 56 ~ 60 */
+};
+
+boolean change_vcc_arm(int voltage)
+{
+	byte reg_value = 0;
+
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "%s:I: voltage: %d\n", __func__, voltage);
+#endif
+
+	if(voltage < arm_voltage_table[0] || voltage > arm_voltage_table[60]) {
+		pr_err(PREFIX "%s:E: invalid voltage: %d\n", __func__, voltage);
+		return FALSE;
+	}
+
+	if (voltage % 25) {
+		pr_err(PREFIX "%s:E: invalid voltage: %d\n", __func__, voltage);
+		return FALSE;
+	}
+
+	if(voltage < arm_voltage_table[16]) { //725 ~ 1100 mV
+		for(reg_value = 0; reg_value <= 15; reg_value++) {
+			if(arm_voltage_table[reg_value] == voltage) break;
+		}
+	}
+	else if(voltage < arm_voltage_table[32]) {	//1125 ~ 1500 mV
+		for(reg_value = 16; reg_value <= 31; reg_value++) {
+			if(arm_voltage_table[reg_value] == voltage) break;
+		}
+	}
+	else if(voltage < arm_voltage_table[48]) {	//1525 ~ 1900 mV
+		for(reg_value = 32; reg_value <= 47; reg_value++) {
+			if(arm_voltage_table[reg_value] == voltage) break;
+		}
+	}
+	else if(voltage <= arm_voltage_table[60]) {	//1925 ~ 2225 mV
+		for(reg_value = 48; reg_value <= 60; reg_value++) {
+			if(arm_voltage_table[reg_value] == voltage) break;
+		}
+	}
+	else {
+		pr_err(PREFIX "%s:E: invalid voltage: %d\n", __func__, voltage);
+		return FALSE;
+	}
+
+ 	Set_MAX8906_PM_REG(T1AOST, 0x0);
+
+	Set_MAX8906_PM_REG(T1APPS, reg_value);
+
+	/* Start Voltage Change */
+	Set_MAX8906_PM_REG(AGO, 0x01);
+
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "%s:I: Succeeded!\n", __func__);
+#endif
+
+	return TRUE;
+}
+
+/* MAX8906 internal voltage table */
+static const unsigned int int_voltage_table[3] = {
+	1050, 1200, 1300,
+};
+
+boolean change_vcc_internal(int voltage)
+{	
+	byte reg_value = 0;
+
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "%s:I: voltage: %d\n", __func__, voltage);
+#endif
+
+	if(voltage < int_voltage_table[0] || voltage > int_voltage_table[2]) {
+		pr_err(PREFIX "%s:E: invalid voltage: %d\n", __func__, voltage);
+		return FALSE;
+	}
+
+	for(reg_value = 0; reg_value <= 2; reg_value++) {
+		if(int_voltage_table[reg_value] == voltage) break;
+	}
+
+	if (reg_value > 2) {
+		pr_err(PREFIX "%s:E: invalid voltage: %d\n", __func__, voltage);
+		return FALSE;
+	}
+	if (!Set_MAX8906_PM_REG(MEMDVM, reg_value)) {
+		pr_err(PREFIX "%s:E: set pmic reg fail(%d)\n", __func__, reg_value);
+		return FALSE;
+	}
+
+#ifdef CONFIG_MAX8906_VERBOSE_LOGGING
+	pr_info(PREFIX "%s:I: Succeeded!\n", __func__);
+#endif
+
+	return TRUE;
+}
+
+boolean set_pmic(pmic_pm_type pm_type, int value)
+{
+	boolean rc = FALSE;
+	switch (pm_type) {
+	case VCC_ARM:
+		rc = change_vcc_arm(value);
+		break;
+	case VCC_INT:
+		rc = change_vcc_internal(value);
+		break;
+	default:
+		pr_err(PREFIX "%s:E: invalid pm_type: %d\n", __func__, pm_type);
+		rc = FALSE;
+		break;
+	}
+	return rc;
+}
+
+boolean get_pmic(pmic_pm_type pm_type, int *value)
+{
+	boolean rc = FALSE;
+	byte reg_buff;
+	*value = 0;
+
+	switch (pm_type) {
+	case VCC_ARM:
+		if(! Get_MAX8906_PM_REG(T1APPS, &reg_buff)) {
+			pr_err(PREFIX "%s:VCC_ARM: get pmic reg fail\n",
+					__func__);
+			return FALSE;
+		}
+		if((reg_buff) < 61)
+			*value = arm_voltage_table[reg_buff];
+		break;
+	case VCC_INT:
+		if(!Get_MAX8906_PM_REG(MEMDVM, &reg_buff))
+		{
+			pr_err(PREFIX "%s:VCC_INT: get pmic reg fail\n",
+					__func__);
+			return FALSE;
+		}
+		if((reg_buff) < 3)
+			*value = int_voltage_table[reg_buff];
+		break;
+	default:
+		pr_err(PREFIX "%s:E: invalid pm_type: %d\n", __func__, pm_type);
+		rc = FALSE;
+		break;
+	}
+        return rc;
+}
+
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_Regulator_Active_Discharge
+
+DESCRIPTION
+    Enable/Disable Active Discharge for regulators.
+
+INPUT PARAMETERS
+    byte onoff : 0 = Active Discharge Enabled
+                 1 = Active Discharge Disabled
+
+    dword  regulators      : multiple regulators using "OR"
+                             WBBCORE    WBBRF   APPS    IO      MEM     WBBMEM  
+                             WBBIO      WBBANA  RFRXL   RFTXL   RFRXH   RFTCXO  
+                             LDOA       LDOB    LDOC    LDOD    SIMLT   SRAM    
+                             CARD1      CARD2   MVT     BIAS    VBUS    USBTXRX 
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+    Set_MAX8906_PM_Regulator_Active_Discharge( 1, WBBCORE | APPS | MEM | WBBMEM);
+    If you want to select one or a few regulators, please use Set_MAX8906_PM_REG().
+    That is, Set_MAX8906_PM_REG(nWCRADE, 0); // APPS uses SEQ7
+
+===========================================================================*/
+boolean Set_MAX8906_PM_Regulator_Active_Discharge(byte onoff, dword regulators)
+{
+    boolean status;
+    int i;
+
+    status = TRUE;
+
+    for(i=0; i < NUMOFREG; i++)
+    {
+        if(regulator_name[i].reg_name | regulators)
+        {
+            if(Set_MAX8906_PM_REG(regulator_name[i].active_discharge, onoff) != TRUE)
+            {
+                status = FALSE;
+            }
+        }
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_Regulator_ENA_SRC
+
+DESCRIPTION
+    Control Enable source for regulators from Flexible Power Sequence between
+    SEQ1 ~ SEQ7 and software enable.
+
+INPUT PARAMETERS
+    flex_power_seq_type sequencer : selected Sequence number for each regulator
+                                         SEQ1 ~ SEQ7 or SW_CNTL
+
+    dword  regulators      : multiple regulators using "OR"
+                             WBBCORE    WBBRF   APPS    IO      MEM     WBBMEM  
+                             WBBIO      WBBANA  RFRXL   RFTXL   RFRXH   RFTCXO  
+                             LDOA       LDOB    LDOC    LDOD    SIMLT   SRAM    
+                             CARD1      CARD2   MVT     BIAS    VBUS    USBTXRX 
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+    Set_MAX8906_PM_Regulator_ENA_SRC( SEQ1, WBBCORE | APPS | MEM | WBBMEM);
+    If you want to select one or a few regulators, please use Set_MAX8906_PM_REG().
+    That is, Set_MAX8906_PM_REG(APPSENSRC, 0x06); // APPS uses SEQ7
+
+===========================================================================*/
+boolean Set_MAX8906_PM_Regulator_ENA_SRC(flex_power_seq_type sequencer, dword regulators)
+{
+    boolean status;
+    int i;
+
+    status = TRUE;
+
+    for(i=0; i < NUMOFREG; i++)
+    {
+        if(regulator_name[i].reg_name | regulators)
+        {
+            if(Set_MAX8906_PM_REG(regulator_name[i].ena_src_item, sequencer) != TRUE)
+            {
+                status = FALSE;
+            }
+        }
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_Regulator_SW_Enable
+
+DESCRIPTION
+    Enable/Disable Active Discharge for regulators.
+
+INPUT PARAMETERS
+    byte onoff : 
+                 0 = Disabled
+                 1 = Enabled
+
+    dword  regulators      : multiple regulators using "OR"
+                             WBBCORE    WBBRF   APPS    IO      MEM     WBBMEM  
+                             WBBIO      WBBANA  RFRXL   RFTXL   RFRXH   RFTCXO  
+                             LDOA       LDOB    LDOC    LDOD    SIMLT   SRAM    
+                             CARD1      CARD2   MVT     BIAS    VBUS    USBTXRX 
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+    Set_MAX8906_PM_Regulator_Active_Discharge( 1, WBBCORE | APPS | MEM | WBBMEM);
+    If you want to select one or a few regulators, please use Set_MAX8906_PM_REG().
+    That is, Set_MAX8906_PM_REG(nWCRADE, 0); // APPS uses SEQ7
+
+===========================================================================*/
+boolean Set_MAX8906_PM_Regulator_SW_Enable(byte onoff, dword regulators)
+{
+    boolean status;
+    int i;
+
+    status = TRUE;
+
+    for(i=0; i < NUMOFREG; i++)
+    {
+        if(regulator_name[i].reg_name | regulators)
+        {
+            if(Set_MAX8906_PM_REG(regulator_name[i].sw_ena_dis, onoff) != TRUE)
+            {
+                status = FALSE;
+            }
+        }
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_PWR_SEQ_Timer_Period
+
+DESCRIPTION
+    Control the Timer Period between each sequencer event for Flexible Power
+    Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for Timer Period
+                                         SEQ1T ~ SEQ7T
+
+    timer_period_type  value           : T_Period_20uS
+                                         T_Period_40uS
+                                         T_Period_80uS
+                                         T_Period_160uS
+                                         T_Period_320uS
+                                         T_Period_640uS
+                                         T_Period_1280uS
+                                         T_Period_2560uS
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Set_MAX8906_PM_PWR_SEQ_Timer_Period(max8906_pm_function_type cntl_item, timer_period_type value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1T:    case SEQ2T:
+    case SEQ3T:    case SEQ4T:
+    case SEQ5T:    case SEQ6T:
+    case SEQ7T:
+        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Get_MAX8906_PM_PWR_SEQ_Timer_Period
+
+DESCRIPTION
+    Read the Timer Period between each sequencer event for Flexible Power
+    Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for Timer Period
+                                         SEQ1T, SEQ2T, SEQ3T, SEQ4T,
+                                         SEQ5T, SEQ6T, SEQ7T
+
+RETURN VALUE
+    timer_period_type  value           : T_Period_20uS
+                                         T_Period_40uS
+                                         T_Period_80uS
+                                         T_Period_160uS
+                                         T_Period_320uS
+                                         T_Period_640uS
+                                         T_Period_1280uS
+                                         T_Period_2560uS
+
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Get_MAX8906_PM_PWR_SEQ_Timer_Period(max8906_pm_function_type cntl_item, timer_period_type *value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1T:    case SEQ2T:
+	case SEQ3T:    case SEQ4T:
+    case SEQ5T:    case SEQ6T:
+	case SEQ7T:
+		if(Get_MAX8906_PM_REG(cntl_item, (byte *)value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_PWR_SEQ_Ena_Src
+
+DESCRIPTION
+    Control the enable source for Flexible Power Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for enable source
+                                         SEQ1SRC, SEQ2SRC, SEQ3SRC, SEQ4SRC, 
+                                         SEQ5SRC, SEQ6SRC, SEQ7SRC
+
+    byte value                         : 
+                            SEQ1SRC = 0 : SYSEN hardware input
+                                      1 : PWREN hardware input
+                                      2 : SEQ1EN software bit
+                                         
+                            SEQ2SRC = 0 : PWREN hardware input
+                                      1 : SYSEN hardware input
+                                      2 : SEQ2EN software bit
+                                         
+                            SEQ3SRC = 0 : WBBEN hardware input
+                                      1 : reserved
+                                      2 : SEQ3EN software bit
+                                         
+                            SEQ4SRC = 0 : TCXOEN hardware input
+                                      1 : reserved
+                                      2 : SEQ4EN software bit
+                                         
+                            SEQ5SRC = 0 : RFRXEN hardware input
+                                      1 : reserved
+                                      2 : SEQ5EN software bit
+                                         
+                            SEQ6SRC = 0 : RFTXEN hardware input
+                                      1 : reserved
+                                      2 : SEQ6EN software bit
+                                         
+                            SEQ7SRC = 0 : ENA hardware input
+                                      1 : reserved
+                                      2 : SEQ7EN software bit
+                                         
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Set_MAX8906_PM_PWR_SEQ_Ena_Src(max8906_pm_function_type cntl_item, byte value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1SRC:    case SEQ2SRC:
+    case SEQ3SRC:    case SEQ4SRC:
+    case SEQ5SRC:    case SEQ6SRC:
+    case SEQ7SRC:
+        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Get_MAX8906_PM_PWR_SEQ_Ena_Src
+
+DESCRIPTION
+    Read the enable source for Flexible Power Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for enable source
+                                         SEQ1SRC, SEQ2SRC, SEQ3SRC, SEQ4SRC, 
+                                         SEQ5SRC, SEQ6SRC, SEQ7SRC
+
+RETURN VALUE
+    byte value                         : 
+                            SEQ1SRC = 0 : SYSEN hardware input
+                                      1 : PWREN hardware input
+                                      2 : SEQ1EN software bit
+                                         
+                            SEQ2SRC = 0 : PWREN hardware input
+                                      1 : SYSEN hardware input
+                                      2 : SEQ2EN software bit
+                                         
+                            SEQ3SRC = 0 : WBBEN hardware input
+                                      1 : reserved
+                                      2 : SEQ3EN software bit
+                                         
+                            SEQ4SRC = 0 : TCXOEN hardware input
+                                      1 : reserved
+                                      2 : SEQ4EN software bit
+                                         
+                            SEQ5SRC = 0 : RFRXEN hardware input
+                                      1 : reserved
+                                      2 : SEQ5EN software bit
+                                         
+                            SEQ6SRC = 0 : RFTXEN hardware input
+                                      1 : reserved
+                                      2 : SEQ6EN software bit
+                                         
+                            SEQ7SRC = 0 : ENA hardware input
+                                      1 : reserved
+                                      2 : SEQ7EN software bit
+
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Get_MAX8906_PM_PWR_SEQ_Ena_Src(max8906_pm_function_type cntl_item, byte *value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1SRC:    case SEQ2SRC:
+    case SEQ3SRC:    case SEQ4SRC:
+    case SEQ5SRC:    case SEQ6SRC:
+    case SEQ7SRC:
+        if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_PM_PWR_SEQ_SW_Enable
+
+DESCRIPTION
+    Control the enable source for Flexible Power Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for enable source
+                                         SEQ1EN, SEQ2EN, SEQ3EN, SEQ4EN, 
+                                         SEQ5EN, SEQ6EN, SEQ7EN
+
+    byte value :       0 = Disable regulators
+                       1 = Enable regulators
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+boolean Set_MAX8906_PM_PWR_SEQ_SW_Enable(max8906_pm_function_type cntl_item, byte value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1EN:    case SEQ2EN:
+    case SEQ3EN:    case SEQ4EN:
+    case SEQ5EN:    case SEQ6EN:
+    case SEQ7EN:
+        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+/*===========================================================================
+
+FUNCTION Get_MAX8906_PM_PWR_SEQ_SW_Enable
+
+DESCRIPTION
+    Read the enable source for Flexible Power Sequencer.
+
+INPUT PARAMETERS
+    max8906_pm_function_type cntl_item : selected Sequence number for enable source
+                                         SEQ1EN, SEQ2EN, SEQ3EN, SEQ4EN, 
+                                         SEQ5EN, SEQ6EN, SEQ7EN
+
+
+RETURN VALUE
+    byte value :       0 = Disable regulators
+                       1 = Enable regulators
+
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+
+===========================================================================*/
+boolean Get_MAX8906_PM_PWR_SEQ_SW_Enable(max8906_pm_function_type cntl_item, byte *value)
+{
+    boolean status;
+
+    status = TRUE;
+    switch(cntl_item)
+    {
+    case SEQ1EN:    case SEQ2EN:
+    case SEQ3EN:    case SEQ4EN:
+    case SEQ5EN:    case SEQ6EN:
+    case SEQ7EN:
+
+        if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
+        {
+            status =FALSE;
+        }
+        break;
+    default:
+        status = FALSE;
+    }
+
+    return status;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*
  * Voltage regulator
  */

@@ -30,8 +30,12 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-
-
+//extern max8906_register_type  max8906reg[ENDOFREG];
+extern max8906_function_type  max8906pm[ENDOFPM];
+//extern max8906_regulator_name_type regulator_name[NUMOFREG];
+extern boolean Get_MAX8906_PM_REG(max8906_pm_function_type, byte *);
+extern unsigned int pmic_read(u8, u8, u8*, u8);
+extern unsigned int pmic_write(u8, u8, u8*, u8);
 
 
 
@@ -51,6 +55,16 @@ void Set_MAX8906_PM_TSC_init()
 void Set_MAX8906_PM_TSC_detect_isr()
 {
     // send TSC detect event
+}
+
+unsigned int pmic_tsc_write(u8 slaveaddr, u8 regaddr, u8 *cmd)
+{
+	return pmic_write(slaveaddr, regaddr, cmd, 1); 
+}
+
+unsigned int pmic_tsc_read(u8 slaveaddr, u8 regaddr, u8 *cmd)
+{
+	return pmic_read(slaveaddr, regaddr, cmd, 1); 
 }
 
 
@@ -230,7 +244,7 @@ boolean Get_MAX8906_TSC_CONV_REG(max8906_pm_function_type reg_num, byte *cmd)
         // Incorrect register for TSC
         return FALSE;
     }
-    if(pmic_tsc_read(max8906pm[reg_num].slave_addr, &tsc_buff) != PMIC_PASS)
+    if(pmic_tsc_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &tsc_buff) != PMIC_PASS)
     {
         // Register Read Command failed
         return FALSE;
@@ -242,4 +256,46 @@ boolean Get_MAX8906_TSC_CONV_REG(max8906_pm_function_type reg_num, byte *cmd)
 }
 
 
+
+/*===========================================================================
+
+FUNCTION Set_MAX8906_TSC_CONV_REG                                
+
+DESCRIPTION
+    This function write the value at the selected register for Touch-Screen
+    Conversion Command.
+
+INPUT PARAMETERS
+    reg_num :   selected register in the register address.
+    byte cmd   : a data(bit0~2) of register to write.
+
+RETURN VALUE
+    boolean : 0 = FALSE
+              1 = TRUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+
+boolean Set_MAX8906_TSC_CONV_REG(max8906_pm_function_type reg_num, byte cmd)
+{
+    byte tsc_buff;
+
+    if((reg_num < X_Drive) || (reg_num > AUX2_Measurement))
+    {
+        // Incorrect register for TSC
+        return FALSE;
+    }
+
+    tsc_buff =  (max8906pm[reg_num].mask & (byte)(cmd));
+
+    if(pmic_tsc_write(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &tsc_buff, 1) != PMIC_PASS)
+    {
+        // Register Write command failed
+        return FALSE;
+    }
+    return TRUE;
+}
 
