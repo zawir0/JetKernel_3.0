@@ -57,58 +57,6 @@ extern unsigned int pmic_write(u8, u8, u8*, u8);
 
 /*===========================================================================
 
-      P O W E R     M A N A G E M E N T     S E C T I O N
-
-  ===========================================================================*/
-
-
-/*===========================================================================
-
-      I N I T    R O U T I N E
-
-===========================================================================*/
-/*===========================================================================
-
-FUNCTION MAX8906_PM_init
-
-DESCRIPTION
-    When power up, MAX8906_PM_init will initialize the MAX8906 for each part
-
-INPUT PARAMETERS
-
-RETURN VALUE
-
-DEPENDENCIES
-SIDE EFFECTS
-EXAMPLE 
-
-===========================================================================*/
-void MAX8906_PM_init(void)
-{
-    // Set the LDO voltage
-    // When PWRSL is connected to GND, the default voltage of MAX8906 is like this.
-    // LDO1 = 2.6V    LDO2  = 2.6V   LDO3 = 2.85V   LDO4 = 2.85V
-    // LDO5 = 2.85V    LDO6  = 2.85V  LDO7 = 2.85V   LDO8 = 2.85V
-    // LDO9 = 2.85V   LDO10 = 2.85V  LDO11 = 1.8V   LDO14 = 2.80V
-
-    // Set the LDO on/off function
-    // the default value for MAX8906
-    // SD1   = On   SD2   = On   SD3  = Off  LDO1  = On   LDO2   = On
-    // LDO3  = Off  LDO4  = Off  LDO5 = Off  LDO6  = Off  LDO7   = Off
-    // LDO8  = Off  LDO9 = Off  LDO10 = Off  LDO11 = Off  LDO12  = Off
-    // LDO11 = Off  LDO12 = On  LDO13 = Off  LDO14 = Off  REFOUT = On 
-
-     // if you use USB transceiver, Connect internal 1.5k pullup resistor.
-     //Set_MAX8906_PM_USB_CNTL(USB_PU_EN,1);
-     // enable SMPL function
-     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_SMPL, (byte)1);
-     // enable WTSR function for soft reset
-     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_WTSR, (byte)1);
-}
-
-
-/*===========================================================================
-
 FUNCTION Set_MAX8906_PM_REG                                
 
 DESCRIPTION
@@ -948,6 +896,49 @@ boolean Get_MAX8906_PM_PWR_SEQ_SW_Enable(max8906_pm_function_type cntl_item, byt
     return status;
 }
 
+/*===========================================================================
+
+      I N I T    R O U T I N E
+
+===========================================================================*/
+/*===========================================================================
+
+FUNCTION MAX8906_PM_init
+
+DESCRIPTION
+    When power up, MAX8906_PM_init will initialize the MAX8906 for each part
+
+INPUT PARAMETERS
+
+RETURN VALUE
+
+DEPENDENCIES
+SIDE EFFECTS
+EXAMPLE 
+
+===========================================================================*/
+void MAX8906_PM_init(void)
+{
+    // Set the LDO voltage
+    // When PWRSL is connected to GND, the default voltage of MAX8906 is like this.
+    // LDO1 = 2.6V    LDO2  = 2.6V   LDO3 = 2.85V   LDO4 = 2.85V
+    // LDO5 = 2.85V    LDO6  = 2.85V  LDO7 = 2.85V   LDO8 = 2.85V
+    // LDO9 = 2.85V   LDO10 = 2.85V  LDO11 = 1.8V   LDO14 = 2.80V
+
+    // Set the LDO on/off function
+    // the default value for MAX8906
+    // SD1   = On   SD2   = On   SD3  = Off  LDO1  = On   LDO2   = On
+    // LDO3  = Off  LDO4  = Off  LDO5 = Off  LDO6  = Off  LDO7   = Off
+    // LDO8  = Off  LDO9 = Off  LDO10 = Off  LDO11 = Off  LDO12  = Off
+    // LDO11 = Off  LDO12 = On  LDO13 = Off  LDO14 = Off  REFOUT = On 
+
+     // if you use USB transceiver, Connect internal 1.5k pullup resistor.
+     //Set_MAX8906_PM_USB_CNTL(USB_PU_EN,1);
+     // enable SMPL function
+     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_SMPL, (byte)1);
+     // enable WTSR function for soft reset
+     //Set_MAX8906_RTC_REG(WTSR_SMPL_CNTL_EN_WTSR, (byte)1);
+}
 
 
 
@@ -982,6 +973,7 @@ struct max8906reg_data {
 	struct max8906_dev	*iodev;
 	int			num_regulators;
 	struct regulator_dev	**rdev;
+
 	u8                      buck1_vol[4]; /* voltages for selection */
 	u8                      buck2_vol[2];
 	unsigned int		buck1_idx; /* index to last changed voltage */
