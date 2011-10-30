@@ -836,10 +836,6 @@ max8906_function_type  max8906pm[ENDOFPM] =
     /* slave addr  addr        mask        clear       shift */
     {  0x78,       0x68,       0x38,       0xC7,       0x03 }, // SEQ5T
     {  0x78,       0x68,       0x06,       0xF9,       0x01 }, // SEQ5SRC
-
-
-
-
     {  0x78,       0x68,       0x01,       0xFE,       0x00 }, // SEQ5EN
 
     // SEQ6CNFG register

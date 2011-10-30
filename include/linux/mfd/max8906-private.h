@@ -105,6 +105,13 @@ struct max8906_dev {
 	bool wakeup;
 };
 
+extern int max8906_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest);
+extern int max8906_bulk_read(struct i2c_client *i2c, u8 reg, int count,
+		u8 *buf);
+extern int max8906_write_reg(struct i2c_client *i2c, u8 reg, u8 value);
+extern int max8906_bulk_write(struct i2c_client *i2c, u8 reg, int count,
+		u8 *buf);
+extern int max8906_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask);
 
 
 
@@ -1211,6 +1218,8 @@ typedef enum {
 
 
 
+
+
 //===========================================================================
 // 
 //  MAX8906 Power Management Section
@@ -1282,7 +1291,9 @@ typedef const struct {
 } max8906_regulator_name_type;
 
 
-
+extern max8906_regulator_name_type regulator_name[NUMOFREG];
+extern max8906_register_type  max8906reg[ENDOFREG];
+extern max8906_function_type  max8906pm[ENDOFPM];
 
 
 

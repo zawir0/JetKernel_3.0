@@ -38,10 +38,8 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-extern max8906_register_type  max8906reg[ENDOFREG];
-extern max8906_function_type  max8906pm[ENDOFPM];
-extern max8906_regulator_name_type regulator_name[NUMOFREG];
 extern int max8906_i2c_device_update(struct max8906_data*, u8, u8, u8);
+extern int max8906_i2c_device_read(struct max8906_data*, u8 , u8*);
 
 extern unsigned int pmic_read(u8, u8, u8*, u8);
 extern unsigned int pmic_write(u8, u8, u8*, u8);
@@ -79,33 +77,33 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_REG(max8906_pm_function_type reg_num, byte value)
 {
-    byte reg_buff;
+	byte reg_buff;
 
-    if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
-    {
-        // Register Read command failed
+	if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
+	{
+		// Register Read command failed
 #ifdef CONFIG_MAX8906_VERBOSE_LOGGING
 	pr_info(PREFIX "read from slave_add 0x%x, reg 0x%x failed = 0x%x \n", __func__, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, reg_buff);
 #endif
-        return FALSE;
-    }
+		return FALSE;
+	}
 #ifdef CONFIG_MAX8906_VERBOSE_LOGGING
 	pr_info(PREFIX "read from slave_add 0x%x, reg 0x%x succeeded = 0x%x \n", __func__, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, reg_buff);
 #endif
 
-    reg_buff = (reg_buff & max8906pm[reg_num].clear) | (value << max8906pm[reg_num].shift);
-    if(pmic_write(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
-    {
-        // Register Write command failed
+	reg_buff = (reg_buff & max8906pm[reg_num].clear) | (value << max8906pm[reg_num].shift);
+	if(pmic_write(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &reg_buff, (byte)1) != PMIC_PASS)
+	{
+		// Register Write command failed
 #ifdef CONFIG_MAX8906_VERBOSE_LOGGING
 	pr_info(PREFIX "write (0x%x) to slave_add 0x%x, reg 0x%x failed \n", __func__, reg:buff, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr);
 #endif
-        return FALSE;
-    }
+		return FALSE;
+	}
 #ifdef CONFIG_MAX8906_VERBOSE_LOGGING
 	pr_info(PREFIX "write (0x%x) to slave_add 0x%x, reg 0x%x succeeded \n", __func__, reg:buff, max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr);
 #endif
-    return TRUE;
+	return TRUE;
 }
 
 /*===========================================================================
@@ -131,17 +129,17 @@ EXAMPLE
 ===========================================================================*/
 boolean Get_MAX8906_PM_REG(max8906_pm_function_type reg_num, byte *reg_buff)
 {
-    byte temp_buff;
+	byte temp_buff;
 
-    if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &temp_buff, (byte)1) != PMIC_PASS)
-    {
-        // Register Read Command failed
-        return FALSE;
-    }
+	if(pmic_read(max8906pm[reg_num].slave_addr, max8906pm[reg_num].addr, &temp_buff, (byte)1) != PMIC_PASS)
+	{
+		// Register Read Command failed
+		return FALSE;
+	}
 
-    *reg_buff = (temp_buff & max8906pm[reg_num].mask) >> max8906pm[reg_num].shift;
+	*reg_buff = (temp_buff & max8906pm[reg_num].mask) >> max8906pm[reg_num].shift;
 
-    return TRUE;
+	return TRUE;
 }
 
 
@@ -170,12 +168,12 @@ EXAMPLE
 boolean Set_MAX8906_PM_ADDR(max8906_pm_register_type reg_addr, byte *reg_buff, byte length)
 {
 
-    if(pmic_write(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
-    {
-        // Register Write command failed
-        return FALSE;
-    }
-    return TRUE;
+	if(pmic_write(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
+	{
+		// Register Write command failed
+		return FALSE;
+	}
+	return TRUE;
 
 }
 
@@ -205,17 +203,17 @@ EXAMPLE
 ===========================================================================*/
 boolean Get_MAX8906_PM_ADDR(max8906_pm_register_type reg_addr, byte *reg_buff, byte length)
 {
-    if(reg_addr > ENDOFREG)
-    {
-        // Invalid Read Register
-        return FALSE; // return error;
-    }
-    if(pmic_read(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
-    {
-        // Register Read command failed
-        return FALSE;
-    }
-    return TRUE;
+	if(reg_addr > ENDOFREG)
+	{
+		// Invalid Read Register
+		return FALSE; // return error;
+	}
+	if(pmic_read(max8906reg[reg_addr].slave_addr, max8906reg[reg_addr].addr, reg_buff, length) != PMIC_PASS)
+	{
+		// Register Read command failed
+		return FALSE;
+	}
+	return TRUE;
 }
 
 
@@ -380,7 +378,7 @@ boolean get_pmic(pmic_pm_type pm_type, int *value)
 		rc = FALSE;
 		break;
 	}
-        return rc;
+	return rc;
 }
 
 
@@ -416,23 +414,23 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_Regulator_Active_Discharge(byte onoff, dword regulators)
 {
-    boolean status;
-    int i;
+	boolean status;
+	int i;
 
-    status = TRUE;
+	status = TRUE;
 
-    for(i=0; i < NUMOFREG; i++)
-    {
-        if(regulator_name[i].reg_name | regulators)
-        {
-            if(Set_MAX8906_PM_REG(regulator_name[i].active_discharge, onoff) != TRUE)
-            {
-                status = FALSE;
-            }
-        }
-    }
+	for(i=0; i < NUMOFREG; i++)
+	{
+		if(regulator_name[i].reg_name | regulators)
+		{
+			if(Set_MAX8906_PM_REG(regulator_name[i].active_discharge, onoff) != TRUE)
+			{
+				status = FALSE;
+			}
+		}
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -468,23 +466,23 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_Regulator_ENA_SRC(flex_power_seq_type sequencer, dword regulators)
 {
-    boolean status;
-    int i;
+	boolean status;
+	int i;
 
-    status = TRUE;
+	status = TRUE;
 
-    for(i=0; i < NUMOFREG; i++)
-    {
-        if(regulator_name[i].reg_name | regulators)
-        {
-            if(Set_MAX8906_PM_REG(regulator_name[i].ena_src_item, sequencer) != TRUE)
-            {
-                status = FALSE;
-            }
-        }
-    }
+	for(i=0; i < NUMOFREG; i++)
+	{
+		if(regulator_name[i].reg_name | regulators)
+		{
+			if(Set_MAX8906_PM_REG(regulator_name[i].ena_src_item, sequencer) != TRUE)
+			{
+				status = FALSE;
+			}
+		}
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -520,23 +518,23 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_Regulator_SW_Enable(byte onoff, dword regulators)
 {
-    boolean status;
-    int i;
+	boolean status;
+	int i;
 
-    status = TRUE;
+	status = TRUE;
 
-    for(i=0; i < NUMOFREG; i++)
-    {
-        if(regulator_name[i].reg_name | regulators)
-        {
-            if(Set_MAX8906_PM_REG(regulator_name[i].sw_ena_dis, onoff) != TRUE)
-            {
-                status = FALSE;
-            }
-        }
-    }
+	for(i=0; i < NUMOFREG; i++)
+	{
+		if(regulator_name[i].reg_name | regulators)
+		{
+			if(Set_MAX8906_PM_REG(regulator_name[i].sw_ena_dis, onoff) != TRUE)
+			{
+				status = FALSE;
+			}
+		}
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -545,7 +543,7 @@ boolean Set_MAX8906_PM_Regulator_SW_Enable(byte onoff, dword regulators)
 FUNCTION Set_MAX8906_PM_PWR_SEQ_Timer_Period
 
 DESCRIPTION
-    Control the Timer Period between each sequencer event for Flexible Power
+	Control the Timer Period between each sequencer event for Flexible Power
     Sequencer.
 
 INPUT PARAMETERS
@@ -572,25 +570,25 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_PWR_SEQ_Timer_Period(max8906_pm_function_type cntl_item, timer_period_type value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1T:    case SEQ2T:
-    case SEQ3T:    case SEQ4T:
-    case SEQ5T:    case SEQ6T:
-    case SEQ7T:
-        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1T:    case SEQ2T:
+	case SEQ3T:    case SEQ4T:
+	case SEQ5T:    case SEQ6T:
+	case SEQ7T:
+		if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -627,28 +625,28 @@ EXAMPLE
 ===========================================================================*/
 boolean Get_MAX8906_PM_PWR_SEQ_Timer_Period(max8906_pm_function_type cntl_item, timer_period_type *value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1T:    case SEQ2T:
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1T:    case SEQ2T:
 	case SEQ3T:    case SEQ4T:
-    case SEQ5T:    case SEQ6T:
+	case SEQ5T:    case SEQ6T:
 	case SEQ7T:
 		if(Get_MAX8906_PM_REG(cntl_item, (byte *)value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
-
+	
 /*===========================================================================
 
 FUNCTION Set_MAX8906_PM_PWR_SEQ_Ena_Src
@@ -702,25 +700,25 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_PWR_SEQ_Ena_Src(max8906_pm_function_type cntl_item, byte value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1SRC:    case SEQ2SRC:
-    case SEQ3SRC:    case SEQ4SRC:
-    case SEQ5SRC:    case SEQ6SRC:
-    case SEQ7SRC:
-        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1SRC:    case SEQ2SRC:
+	case SEQ3SRC:    case SEQ4SRC:
+	case SEQ5SRC:    case SEQ6SRC:
+	case SEQ7SRC:
+		if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -776,25 +774,25 @@ EXAMPLE
 ===========================================================================*/
 boolean Get_MAX8906_PM_PWR_SEQ_Ena_Src(max8906_pm_function_type cntl_item, byte *value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1SRC:    case SEQ2SRC:
-    case SEQ3SRC:    case SEQ4SRC:
-    case SEQ5SRC:    case SEQ6SRC:
-    case SEQ7SRC:
-        if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1SRC:    case SEQ2SRC:
+	case SEQ3SRC:    case SEQ4SRC:
+	case SEQ5SRC:    case SEQ6SRC:
+	case SEQ7SRC:
+		if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -824,25 +822,25 @@ EXAMPLE
 ===========================================================================*/
 boolean Set_MAX8906_PM_PWR_SEQ_SW_Enable(max8906_pm_function_type cntl_item, byte value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1EN:    case SEQ2EN:
-    case SEQ3EN:    case SEQ4EN:
-    case SEQ5EN:    case SEQ6EN:
-    case SEQ7EN:
-        if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1EN:    case SEQ2EN:
+	case SEQ3EN:    case SEQ4EN:
+	case SEQ5EN:    case SEQ6EN:
+	case SEQ7EN:
+		if(Set_MAX8906_PM_REG(cntl_item, value) != TRUE)
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
 
@@ -874,26 +872,26 @@ EXAMPLE
 ===========================================================================*/
 boolean Get_MAX8906_PM_PWR_SEQ_SW_Enable(max8906_pm_function_type cntl_item, byte *value)
 {
-    boolean status;
+	boolean status;
 
-    status = TRUE;
-    switch(cntl_item)
-    {
-    case SEQ1EN:    case SEQ2EN:
-    case SEQ3EN:    case SEQ4EN:
-    case SEQ5EN:    case SEQ6EN:
-    case SEQ7EN:
+	status = TRUE;
+	switch(cntl_item)
+	{
+	case SEQ1EN:    case SEQ2EN:
+	case SEQ3EN:    case SEQ4EN:
+	case SEQ5EN:    case SEQ6EN:
+	case SEQ7EN:
 
-        if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
-        {
-            status =FALSE;
-        }
-        break;
-    default:
-        status = FALSE;
-    }
+		if(Get_MAX8906_PM_REG(cntl_item, value) != TRUE)
+		{
+			status =FALSE;
+		}
+		break;
+	default:
+		status = FALSE;
+	}
 
-    return status;
+	return status;
 }
 
 /*===========================================================================
@@ -988,37 +986,71 @@ struct voltage_map_desc {
 };
 
 /* Voltage maps */
-static const struct voltage_map_desc ldo23_voltage_map_desc = {
-	.min = 800000,	.step = 50000,	.max = 1300000,
+static const struct voltage_map_desc ldo5V_voltage_map_desc = {
+	.min = 5000000,	.step = 100000,	.max = 5000000,
 };
-static const struct voltage_map_desc ldo45679_voltage_map_desc = {
-	.min = 1600000,	.step = 100000,	.max = 3600000,
+static const struct voltage_map_desc ldo3V3_voltage_map_desc = {
+	.min = 3300000,	.step = 100000,	.max = 3300000,
 };
-static const struct voltage_map_desc ldo8_voltage_map_desc = {
-	.min = 3000000,	.step = 100000,	.max = 3600000,
+static const struct voltage_map_desc ldo075_390_voltage_map_desc = {
+	.min = 750000,	.step = 50000,	.max = 3900000,
 };
-static const struct voltage_map_desc buck12_voltage_map_desc = {
-	.min = 750000,	.step = 50000,	.max = 1500000,
+static const struct voltage_map_desc ldo075_180_voltage_map_desc = {
+	.min = 750000,	.step = 50000,	.max = 1800000,
 };
-static const struct voltage_map_desc buck3_voltage_map_desc = {
-	.min = 1600000,	.step = 100000,	.max = 3600000,
+static const struct voltage_map_desc ldo0725_180_voltage_map_desc = {
+	.min = 725000,	.step = 25000,	.max = 1800000,
+};
+static const struct voltage_map_desc ldo180_330_voltage_map_desc = {
+	.min = 1800000,	.step = 50000,	.max = 3300000,
+};
+static const struct voltage_map_desc ldo180_300_voltage_map_desc = {
+	.min = 1800000,	.step = 50000,	.max = 3000000,
+};
+static const struct voltage_map_desc ldo120_330_voltage_map_desc = {
+	.min = 1200000,	.step = 50000,	.max = 3300000,
+};
+
+static const struct voltage_map_desc buck0725_180_voltage_map_desc = {
+	.min = 725000,	.step = 25000,	.max = 1800000,
+};
+static const struct voltage_map_desc buck075_390_voltage_map_desc = {
+	.min = 750000,	.step = 50000,	.max = 3900000,
+};
+static const struct voltage_map_desc buck1V8_2V8_3V0_voltage_map_desc = {
+	.min = 1800000,	.step = 200000,	.max = 3000000,
+};
+static const struct voltage_map_desc buck1V05_1V2_1V3_voltage_map_desc = {
+	.min = 1050000,	.step = 150000,	.max = 1300000,
 };
 
 static const struct voltage_map_desc *ldo_voltage_map[] = {
-	&ldo23_voltage_map_desc,	/* LDO2 */
-	&ldo23_voltage_map_desc,	/* LDO3 */
-	&ldo45679_voltage_map_desc,	/* LDO4 */
-	&ldo45679_voltage_map_desc,	/* LDO5 */
-	&ldo45679_voltage_map_desc,	/* LDO6 */
-	&ldo45679_voltage_map_desc,	/* LDO7 */
-	&ldo8_voltage_map_desc,		/* LDO8 */
-	&ldo45679_voltage_map_desc,	/* LDO9 */
-	&buck12_voltage_map_desc,	/* BUCK1 */
-	&buck12_voltage_map_desc,	/* BUCK2 */
-	&buck3_voltage_map_desc,	/* BUCK3 */
+	&ldo5V_voltage_map_desc,	/* LDO_VBUS */
+	&ldo3V3_voltage_map_desc,	/* LDO_USBTXRX */
+	&ldo075_390_voltage_map_desc,	/* LDO_RFRXL */
+	&ldo075_390_voltage_map_desc,	/* LDO_RFRXH */
+	&ldo075_390_voltage_map_desc,	/* LDO_FTXL */
+	&ldo075_390_voltage_map_desc,	/* LDO_SIMLT */
+	&ldo075_390_voltage_map_desc,	/* LDOA */
+	&ldo075_390_voltage_map_desc,	/* LDOB */
+	&ldo075_390_voltage_map_desc,	/* LDOC */
+	&ldo075_390_voltage_map_desc,	/* LDOD */
+	&ldo3V3_voltage_map_desc,	/* LDO_BIAS */
+	&ldo075_390_voltage_map_desc,	/* LDO_RFTCXO */
+	&ldo075_180_voltage_map_desc,	/* LDO_MVT */
+	&ldo0725_180_voltage_map_desc,	/* LDO_SRAM */
+	&ldo075_390_voltage_map_desc,	/* LDO_CARD1 */
+	&ldo180_330_voltage_map_desc,	/* LDO_CARD2 */
+	&ldo180_300_voltage_map_desc,	/* LDO_WBBANA */
+	&ldo180_300_voltage_map_desc,	/* LDO_WBBIO */
+	&ldo120_330_voltage_map_desc,	/* LDO_WBBMEM */
+	&buck0725_180_voltage_map_desc,	/* BUCK_WBBCORE */
+	&buck075_390_voltage_map_desc,	/* BUCK_WBBRF */
+	&buck0725_180_voltage_map_desc, /* BUCK_APPS */
+	&buck1V8_2V8_3V0_voltage_map_desc, /* BUCK_IO */
+	&buck1V05_1V2_1V3_voltage_map_desc,/* BUCK_MEM */
 };
 
-/*
 static inline int max8906_get_ldo(struct regulator_dev *rdev)
 {
 	return rdev_get_id(rdev);
@@ -1034,17 +1066,42 @@ static int max8906_list_voltage(struct regulator_dev *rdev,
 	if (ldo >= ARRAY_SIZE(ldo_voltage_map))
 		return -EINVAL;
 
-	desc = ldo_voltage_map[ldo];
-	if (desc == NULL)
-		return -EINVAL;
+	switch (ldo) {
+	case MAX8906_BUCK_IO:
+		switch (selector) {
+		case 0 ... 2:
+			val = 1800000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	case MAX8906_BUCK_MEM:
+		switch (selector) {
+		case 0:
+			val = 1050000;
+			break;
+		case 1:
+			val = 1200000;
+			break;
+		case 2:
+			val = 1200000;
+			break;
+		default:
+			return -EINVAL;
+		}
+	default:
+		desc = ldo_voltage_map[ldo];
+		if (desc == NULL)
+			return -EINVAL;
 
-	val = desc->min + desc->step * selector;
-	if (val > desc->max)
-		return -EINVAL;
+		val = desc->min + desc->step * selector;
+		if (val > desc->max)
+			return -EINVAL;
+	}
 
 	return val;
 }
-
+/*
 enum {
 	MAX8906_REG_ONOFF1,
 	MAX8906_REG_ONOFF2,
@@ -1063,14 +1120,15 @@ enum {
 	MAX8906_REG_LDO9,
 	MAX8906_REG_LBCNFG
 };
+*/
 
 static int max8906_get_enable_register(struct regulator_dev *rdev,
 					int *reg, int *shift)
 {
 	int ldo = max8906_get_ldo(rdev);
-
+/* FIXME
 	switch (ldo) {
-	case MAX8906_LDO2 ... MAX8906_LDO5:
+	case MAX8906_LDO_VBUS ... MAX8906_LDO5:
 		*reg = MAX8906_REG_ONOFF1;
 		*shift = 4 - (ldo - MAX8906_LDO2);
 		break;
@@ -1085,13 +1143,14 @@ static int max8906_get_enable_register(struct regulator_dev *rdev,
 	default:
 		return -EINVAL;
 	}
-
+*/
 	return 0;
 }
 
 static int max8906_ldo_is_enabled(struct regulator_dev *rdev)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	int ret, reg, shift = 8;
 	u8 val;
 
@@ -1099,7 +1158,7 @@ static int max8906_ldo_is_enabled(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	ret = max8906_i2c_device_read(max8906, reg, &val);
+	ret = max8906_i2c_device_read(max8906reg, reg, &val);
 	if (ret)
 		return ret;
 
@@ -1108,26 +1167,28 @@ static int max8906_ldo_is_enabled(struct regulator_dev *rdev)
 
 static int max8906_ldo_enable(struct regulator_dev *rdev)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	int reg, shift = 8, ret;
 
 	ret = max8906_get_enable_register(rdev, &reg, &shift);
 	if (ret)
 		return ret;
 
-	return max8906_i2c_device_update(max8906, reg, 1<<shift, 1<<shift);
+	return max8906_i2c_device_update(max8906reg, reg, 1<<shift, 1<<shift);
 }
 
 static int max8906_ldo_disable(struct regulator_dev *rdev)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	int reg, shift = 8, ret;
 
 	ret = max8906_get_enable_register(rdev, &reg, &shift);
 	if (ret)
 		return ret;
 
-	return max8906_i2c_device_update(max8906, reg, 0, 1<<shift);
+	return max8906_i2c_device_update(max8906reg, reg, 0, 1<<shift);
 }
 
 static int max8906_get_voltage_register(struct regulator_dev *rdev,
@@ -1137,6 +1198,7 @@ static int max8906_get_voltage_register(struct regulator_dev *rdev,
 	int reg, shift = 0, mask = 0xff;
 
 	switch (ldo) {
+/*
 	case MAX8906_LDO2 ... MAX8906_LDO3:
 		reg = MAX8906_REG_LDO23;
 		mask = 0xf;
@@ -1165,6 +1227,7 @@ static int max8906_get_voltage_register(struct regulator_dev *rdev,
 	case MAX8906_BUCK3:
 		reg = MAX8906_REG_BUCK3;
 		break;
+*/
 	default:
 		return -EINVAL;
 	}
@@ -1178,7 +1241,8 @@ static int max8906_get_voltage_register(struct regulator_dev *rdev,
 
 static int max8906_get_voltage(struct regulator_dev *rdev)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	int reg, shift = 0, mask, ret;
 	u8 val;
 
@@ -1186,7 +1250,7 @@ static int max8906_get_voltage(struct regulator_dev *rdev)
 	if (ret)
 		return ret;
 
-	ret = max8906_i2c_device_read(max8906, reg, &val);
+	ret = max8906_i2c_device_read(max8906reg, reg, &val);
 	if (ret)
 		return ret;
 
@@ -1199,7 +1263,8 @@ static int max8906_get_voltage(struct regulator_dev *rdev)
 static int max8906_set_voltage(struct regulator_dev *rdev,
 				int min_uV, int max_uV, unsigned *selector)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	const struct voltage_map_desc *desc;
 	int ldo = max8906_get_ldo(rdev);
 	int reg = 0, shift = 0, mask = 0, ret;
@@ -1231,7 +1296,7 @@ static int max8906_set_voltage(struct regulator_dev *rdev,
 	if (ret)
 		return ret;
 
-	return max8906_i2c_device_update(max8906, reg,
+	return max8906_i2c_device_update(max8906reg, reg,
 						i << shift, mask << shift);
 }
 
@@ -1246,10 +1311,11 @@ static struct regulator_ops max8906_regulator_ops = {
 	.set_suspend_disable	= max8906_ldo_disable,
 };
 
-static int max8906_set_buck12_voltage(struct regulator_dev *rdev,
+static int max8906_set_buck_voltage(struct regulator_dev *rdev,
 				int min_uV, int max_uV, unsigned *selector)
 {
-	struct max8906reg_data *max8906 = rdev_get_drvdata(rdev);
+	struct max8906reg_data *max8906reg = rdev_get_drvdata(rdev);
+	struct i2c_client *i2c = max8906reg->iodev->i2c;
 	const struct voltage_map_desc *desc;
 	int prev_uV, sel_uV;
 	int ldo = max8906_get_ldo(rdev), i = 0, ret;
@@ -1276,20 +1342,20 @@ static int max8906_set_buck12_voltage(struct regulator_dev *rdev,
 	*selector = i;
 
 	prev_uV = max8906_get_voltage(rdev);
-
+/*
 	switch (ldo) {
 	case MAX8906_BUCK1:
-		ret = max8906_i2c_device_update(max8906,
+		ret = max8906_i2c_device_update(max8906reg,
 				MAX8906_REG_DVSARM12, (i << 4) | i, 0xff);
 		if (ret)
 			goto err;
-		ret = max8906_i2c_device_update(max8906,
+		ret = max8906_i2c_device_update(max8906reg,
 				MAX8906_REG_DVSARM34, (i << 4) | i, 0xff);
 		if (ret)
 			goto err;
 		break;
 	case MAX8906_BUCK2:
-		ret = max8906_i2c_device_update(max8906,
+		ret = max8906_i2c_device_update(max8906reg,
 				MAX8906_REG_DVSINT12, (i << 4) | i, 0xff);
 		if (ret)
 			goto err;
@@ -1299,100 +1365,46 @@ static int max8906_set_buck12_voltage(struct regulator_dev *rdev,
 	if (prev_uV < sel_uV) {
 		while (prev_uV < sel_uV) {
 			udelay(1);
-			prev_uV += max8906->ramp_rate;
+			prev_uV += max8906reg->ramp_rate;
 		}
 	} else {
 		while (prev_uV > sel_uV) {
 			udelay(1);
-			prev_uV -= max8906->ramp_rate;
+			prev_uV -= max8906reg->ramp_rate;
 		}
 	}
-
+*/
 err:
 	return ret;
 }
 
-static struct regulator_ops max8906_regulator_buck12_ops = {
+static struct regulator_ops max8906_regulator_buck_ops = {
 	.list_voltage		= max8906_list_voltage,
 	.is_enabled		= max8906_ldo_is_enabled,
 	.enable			= max8906_ldo_enable,
 	.disable		= max8906_ldo_disable,
 	.get_voltage		= max8906_get_voltage,
-	.set_voltage		= max8906_set_buck12_voltage,
+	.set_voltage		= max8906_set_buck_voltage,
 	.set_suspend_enable	= max8906_ldo_enable,
 	.set_suspend_disable	= max8906_ldo_disable,
 };
 
 static struct regulator_desc regulators[] = {
 	{
-		.name		= "LDO2",
-		.id		= MAX8906_LDO2,
+		.name		= "LDOA",
+		.id		= MAX8906_LDOA,
 		.ops		= &max8906_regulator_ops,
 		.type		= REGULATOR_VOLTAGE,
 		.owner		= THIS_MODULE,
 	}, {
-		.name		= "LDO3",
-		.id		= MAX8906_LDO3,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO4",
-		.id		= MAX8906_LDO4,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO5",
-		.id		= MAX8906_LDO5,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO6",
-		.id		= MAX8906_LDO6,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO7",
-		.id		= MAX8906_LDO7,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO8",
-		.id		= MAX8906_LDO8,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "LDO9",
-		.id		= MAX8906_LDO9,
-		.ops		= &max8906_regulator_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "BUCK1",
-		.id		= MAX8906_BUCK1,
-		.ops		= &max8906_regulator_buck12_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "BUCK2",
-		.id		= MAX8906_BUCK2,
-		.ops		= &max8906_regulator_buck12_ops,
-		.type		= REGULATOR_VOLTAGE,
-		.owner		= THIS_MODULE,
-	}, {
-		.name		= "BUCK3",
-		.id		= MAX8906_BUCK3,
-		.ops		= &max8906_regulator_ops,
+		.name		= "BUCK_MEM",
+		.id		= MAX8906_BUCK_MEM,
+		.ops		= &max8906_regulator_buck_ops,
 		.type		= REGULATOR_VOLTAGE,
 		.owner		= THIS_MODULE,
 	},
 };
-*/
+
 
 /*
  * platform driver
@@ -1403,7 +1415,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 	struct max8906_dev *iodev = dev_get_drvdata(pdev->dev.parent);
 	struct max8906_platform_data *pdata = dev_get_platdata(iodev->dev);
 	struct regulator_dev **rdev;
-	struct max8906reg_data *max8906;
+	struct max8906reg_data *max8906reg;
 	struct i2c_client *i2c;
 	int i, ret, size;
 
@@ -1412,26 +1424,26 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	max8906 = kzalloc(sizeof(struct max8906reg_data), GFP_KERNEL);
-	if (!max8906)
+	max8906reg = kzalloc(sizeof(struct max8906reg_data), GFP_KERNEL);
+	if (!max8906reg)
 		return -ENOMEM;
 
 	size = sizeof(struct regulator_dev *) * pdata->num_regulators;
-	max8906->rdev = kzalloc(size, GFP_KERNEL);
-	if (!max8906->rdev) {
-		kfree(max8906);
+	max8906reg->rdev = kzalloc(size, GFP_KERNEL);
+	if (!max8906reg->rdev) {
+		kfree(max8906reg);
 		return -ENOMEM;
 	}
 
-	rdev = max8906->rdev;
-	max8906->dev = &pdev->dev;
-	max8906->iodev = iodev;
-	max8906->num_regulators = pdata->num_regulators;
-	platform_set_drvdata(pdev, max8906);
-	i2c = max8906->iodev->i2c;
+	rdev = max8906reg->rdev;
+	max8906reg->dev = &pdev->dev;
+	max8906reg->iodev = iodev;
+	max8906reg->num_regulators = pdata->num_regulators;
+	platform_set_drvdata(pdev, max8906reg);
+	i2c = max8906reg->iodev->i2c;
 
-//	max8906->buck1_idx = pdata->buck1_default_idx;
-//	max8906->buck2_idx = pdata->buck2_default_idx;
+//	max8906reg->buck1_idx = pdata->buck1_default_idx;
+//	max8906reg->buck2_idx = pdata->buck2_default_idx;
 
 	/* NOTE: */
 	/* For unused GPIO NOT marked as -1 (thereof equal to 0)  WARN_ON */
@@ -1458,12 +1470,12 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 
 		gpio_request(pdata->buck1_set1, "MAX8906 BUCK1_SET1");
 		gpio_direction_output(pdata->buck1_set1,
-				      max8906->buck1_idx & 0x1);
+				      max8906reg->buck1_idx & 0x1);
 
 
 		gpio_request(pdata->buck1_set2, "MAX8906 BUCK1_SET2");
 		gpio_direction_output(pdata->buck1_set2,
-				      (max8906->buck1_idx >> 1) & 0x1);
+				      (max8906reg->buck1_idx >> 1) & 0x1);
 */
 		/* Set predefined value for BUCK1 register 1 */
 /*
@@ -1472,7 +1484,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       buck12_voltage_map_desc.step*i
 		       < (pdata->buck1_voltage1 / 1000))
 			i++;
-		max8906->buck1_vol[0] = i;
+		max8906reg->buck1_vol[0] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE1, i);
 		if (ret)
 			goto err_free_mem;
@@ -1485,7 +1497,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       < (pdata->buck1_voltage2 / 1000))
 			i++;
 
-		max8906->buck1_vol[1] = i;
+		max8906reg->buck1_vol[1] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE2, i);
 		if (ret)
 			goto err_free_mem;
@@ -1498,7 +1510,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       < (pdata->buck1_voltage3 / 1000))
 			i++;
 
-		max8906->buck1_vol[2] = i;
+		max8906reg->buck1_vol[2] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE3, i);
 		if (ret)
 			goto err_free_mem;
@@ -1511,7 +1523,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       < (pdata->buck1_voltage4 / 1000))
 			i++;
 
-		max8906->buck1_vol[3] = i;
+		max8906reg->buck1_vol[3] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE4, i);
 		if (ret)
 			goto err_free_mem;
@@ -1529,7 +1541,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		}
 		gpio_request(pdata->buck2_set3, "MAX8906 BUCK2_SET3");
 		gpio_direction_output(pdata->buck2_set3,
-				      max8906->buck2_idx & 0x1);
+				      max8906reg->buck2_idx & 0x1);
 */
 		/* BUCK2 register 1 */
 /*
@@ -1538,7 +1550,7 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       buck12_voltage_map_desc.step*i
 		       < (pdata->buck2_voltage1 / 1000))
 			i++;
-		max8906->buck2_vol[0] = i;
+		max8906reg->buck2_vol[0] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE1, i);
 		if (ret)
 			goto err_free_mem;
@@ -1550,8 +1562,8 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 		       buck12_voltage_map_desc.step*i
 		       < (pdata->buck2_voltage2 / 1000))
 			i++;
-		printk(KERN_ERR "i2:%d, buck2_idx:%d\n", i, max8906->buck2_idx);
-		max8906->buck2_vol[1] = i;
+		printk(KERN_ERR "i2:%d, buck2_idx:%d\n", i, max8906reg->buck2_idx);
+		max8906reg->buck2_vol[1] = i;
 		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE2, i);
 		if (ret)
 			goto err_free_mem;
@@ -1567,11 +1579,11 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 			int count = (desc->max - desc->min) / desc->step + 1;
 			regulators[index].n_voltages = count;
 		}
-		rdev[i] = regulator_register(&regulators[index], max8906->dev,
-				pdata->regulators[i].initdata, max8906);
+		rdev[i] = regulator_register(&regulators[index], max8906reg->dev,
+				pdata->regulators[i].initdata, max8906reg);
 		if (IS_ERR(rdev[i])) {
 			ret = PTR_ERR(rdev[i]);
-			dev_err(max8906->dev, "regulator init failed\n");
+			dev_err(max8906reg->dev, "regulator init failed\n");
 			rdev[i] = NULL;
 			goto err;
 		}
@@ -1580,29 +1592,29 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 
 	return 0;
 err:
-	for (i = 0; i < max8906->num_regulators; i++)
+	for (i = 0; i < max8906reg->num_regulators; i++)
 		if (rdev[i])
 			regulator_unregister(rdev[i]);
 
 err_free_mem:
-	kfree(max8906->rdev);
-	kfree(max8906);
+	kfree(max8906reg->rdev);
+	kfree(max8906reg);
 
 	return ret;
 }
 
 static int __devexit max8906_pmic_remove(struct platform_device *pdev)
 {
-	struct max8906reg_data *max8906 = platform_get_drvdata(pdev);
-	struct regulator_dev **rdev = max8906->rdev;
+	struct max8906reg_data *max8906reg = platform_get_drvdata(pdev);
+	struct regulator_dev **rdev = max8906reg->rdev;
 	int i;
 
-	for (i = 0; i < max8906->num_regulators; i++)
+	for (i = 0; i < max8906reg->num_regulators; i++)
 		if (rdev[i])
 			regulator_unregister(rdev[i]);
 
-	kfree(max8906->rdev);
-	kfree(max8906);
+	kfree(max8906reg->rdev);
+	kfree(max8906reg);
 
 	return 0;
 }

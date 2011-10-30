@@ -360,6 +360,12 @@ static struct platform_device jet_pmic_i2c = {
 	.dev.platform_data	= &jet_pmic_i2c_pdata,
 };
 
+
+// LDOA: 150mA 0.75~3.9V (VLCD_3.1V)
+static struct regulator_consumer_supply ldoa_consumer[] = {
+	REGULATOR_SUPPLY("vdd3", "s6d05a-lcd")
+};
+
 static struct regulator_init_data jet_ldoa_data = {
 	.constraints	= {
 		.name			= "VLCD_3.1V",
@@ -372,6 +378,8 @@ static struct regulator_init_data jet_ldoa_data = {
 			.enabled = 1,
 		},
 	},
+	.num_consumer_supplies	= ARRAY_SIZE(ldoa_consumer),
+	.consumer_supplies	= ldoa_consumer,
 };
 
 /* SPICA definitions
@@ -518,16 +526,16 @@ static struct regulator_init_data spica_ldo9_data = {
 		},
 	},
 };
-
-static struct regulator_consumer_supply buck1_consumer[] = {
+*/
+static struct regulator_consumer_supply buck_mem_consumer[] = {
 	{	.supply	= "vddarm", },
 };
 
-static struct regulator_init_data spica_buck1_data = {
+static struct regulator_init_data jet_buck_mem_data = {
 	.constraints	= {
-		.name			= "VAP_ARM",
-		.min_uV			= 750000,
-		.max_uV			= 1500000,
+		.name			= "VCORE_1.2V_S3C",
+		.min_uV			= 1050000,
+		.max_uV			= 1300000,
 		.apply_uV		= 0,
 		.always_on		= 1,
 		.valid_ops_mask		= REGULATOR_CHANGE_VOLTAGE |
@@ -537,10 +545,10 @@ static struct regulator_init_data spica_buck1_data = {
 			.disabled = 1,
 		},
 	},
-	.num_consumer_supplies	= ARRAY_SIZE(buck1_consumer),
-	.consumer_supplies	= buck1_consumer,
+	.num_consumer_supplies	= ARRAY_SIZE(buck_mem_consumer),
+	.consumer_supplies	= buck_mem_consumer,
 };
-
+/*
 static struct regulator_consumer_supply buck2_consumer[] = {
 	{	.supply	= "vddint", },
 };
@@ -582,42 +590,39 @@ static struct regulator_init_data spica_buck3_data = {
 static struct max8906_regulator_data jet_regulators[] = {
 	// Linear Regulators (LDOs)
 /*
-	{ MAX8906_WBBCORE,	&jet_wbbcore_data },
-	{ MAX8906_WBBRF,	&jet_wbbrf_data },
-	{ MAX8906_APPS,		&jet_apps_data },
-	{ MAX8906_IO,		&jet_io_data },
-	{ MAX8906_MEM,		&jet_mem_data },
-	{ MAX8906_WBBMEM,	&jet_wbbmem_data },
-	{ MAX8906_WBBIO,	&jet_wbbio_data },
-	{ MAX8906_WBBANA,	&jet_wbbana_data },
-	{ MAX8906_RFRXL,	&jet_rfrxl_data },
-	{ MAX8906_RFTXL,	&jet_rftxl_data },
-	{ MAX8906_RFRXH,	&jet_rfrxh_data },
-	{ MAX8906_RFTCXO,	&jet_rftcxo_data },
+	// Two 30mA LDOs, Input Voltage Protected up to 28V Input
+	{ MAX8906_LDO_VBUS,	&jet_vbus_data },
+	{ MAX8906_LDO_USBTXRX,	&jet_usbtxrx_data },
+	// Four 150mA Low-Noise LDOs, 60dB PSRR @ 100kHz, 45μV RMS Noise from 10Hz to 100kHz, 40μA Iq, Input Voltage Down to 1.7V
+	{ MAX8906_LDO_RFRXL,	&jet_rfrxl_data },
+	{ MAX8906_LDO_RFRXH,	&jet_rfrxh_data },
+	{ MAX8906_LDO_RFTXL,	&jet_rftxl_data },
+	{ MAX8906_LDO_SIMLT,	&jet_simlt_data },
+	// Six 150mA Low Quiescent Current LDOs, 60dB PSRR @ 100kHz, 67μV RMS Noise from 10Hz to 100kHz, 25μA Iq, Input Voltage Down to 1.7V
 */
-	{ MAX8906_LDOA,		&jet_ldoa_data }
+	{ MAX8906_LDOA,		&jet_ldoa_data },
 /*
 	{ MAX8906_LDOB,		&jet_ldob_data },
 	{ MAX8906_LDOC,		&jet_ldoc_data },
 	{ MAX8906_LDOD,		&jet_ldod_data },
-	{ MAX8906_SIMLT,	&jet_simlt_data },
-	{ MAX8906_SRAM,		&jet_sram_data },
-	{ MAX8906_CARD1,	&jet_card1_data },
-	{ MAX8906_CARD2,	&jet_card2_data },
-	{ MAX8906_MVT,		&jet_mvt_data },
-	{ MAX8906_BIAS,		&jet_bias_data },
-	{ MAX8906_VBUS,		&jet_vbus_data },
-	{ MAX8906_USBTXRX,	&jet_usbtxrx_data },
-	// Flexible Power Sequencers (DCDC BUCK)
-	{ MAX8906_SEQ1,		&jet_seq1_data },
-	{ MAX8906_SEQ2,		&jet_seq2_data },
-	{ MAX8906_SEQ3,		&jet_seq3_data },
-	{ MAX8906_SEQ4,		&jet_seq4_data },
-	{ MAX8906_SEQ5,		&jet_seq5_data },
-	{ MAX8906_SEQ6,		&jet_seq6_data },
-	{ MAX8906_SEQ7,		&jet_seq7_data },
-	{ MAX8906_SW_CNTL,	&jet_sw_cntl_data }
+	{ MAX8906_LDO_BIAS,	&jet_bias_data },
+	{ MAX8906_LDO_RFTCXO,	&jet_rftcxo_data },
+	// Seven 300mA LDOs, 60dB PSRR @ 100kHz, 67μV RMS Noise from 10Hz to 100kHz, 30μA Iq, Input Voltage Down to 1.7V
+	{ MAX8906_LDO_MVT,	&jet_mvt_data },
+	{ MAX8906_LDO_SRAM,	&jet_sram_data },
+	{ MAX8906_LDO_CARD1,	&jet_card1_data },
+	{ MAX8906_LDO_CARD2,	&jet_card2_data },
+	{ MAX8906_LDO_WBBANA,	&jet_wbbana_data },
+	{ MAX8906_LDO_WBBIO,	&jet_wbbio_data },
+	{ MAX8906_LDO_WBBMEM,	&jet_wbbmem_data },
+	// Step down regulators (DCDC BUCK)
+	{ MAX8906_BUCK_WBBCORE,	&jet_wbbcore_data },
+	{ MAX8906_BUCK_WBBRF,	&jet_wbbrf_data },
+	{ MAX8906_BUCK_APPS,	&jet_apps_data },
+	{ MAX8906_BUCK_IO,	&jet_io_data },
 */
+	{ MAX8906_BUCK_MEM,	&jet_buck_mem_data }
+
 };
 
 static struct max8906_platform_data jet_max8906_pdata = {

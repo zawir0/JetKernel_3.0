@@ -30,10 +30,6 @@
 #include <linux/mfd/max8906.h>
 #include <linux/mfd/max8906-private.h>
 
-extern max8906_register_type  max8906reg[ENDOFREG];
-extern max8906_function_type  max8906pm[ENDOFPM];
-extern max8906_regulator_name_type regulator_name[NUMOFREG];
-
 #ifdef PREFIX
 #undef PREFIX
 #endif
@@ -52,8 +48,8 @@ extern max8906_regulator_name_type regulator_name[NUMOFREG];
 
 static struct mfd_cell max8906_devs[] = {
 	{ .name = "max8906-pmic", },
-	{ .name = "max8906-rtc", },
-	{ .name = "max8906-battery", },
+//	{ .name = "max8906-rtc", },
+//	{ .name = "max8906-battery", },
 };
 
 static struct i2c_driver max8906_i2c_driver;
@@ -67,7 +63,7 @@ static struct i2c_client *max8906_apm_i2c_client = NULL;
 /*
  * new I2C Interface
  */
-
+/*
 static int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *dest)
 {
 	struct i2c_client *client = max8906->i2c_client;
@@ -108,62 +104,128 @@ static int max8906_i2c_device_update(struct max8906_data *max8906, u8 reg,
 
 	return ret;
 }
+*/
 
-
-/*
- * old I2C Interface
- */
-
-static int max8906_read(struct i2c_client *client, u8 reg, u8 *data)
+int max8906_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
 {
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
 	int ret;
 	u8 buf[1];
 	struct i2c_msg msg[2];
 
 	buf[0] = reg; 
 
-	msg[0].addr = client->addr;
+	msg[0].addr = i2c->addr;
 	msg[0].flags = 0;
 	msg[0].len = 1;
 	msg[0].buf = buf;
 
-	msg[1].addr = client->addr;
+	msg[1].addr = i2c->addr;
 	msg[1].flags = I2C_M_RD;
 	msg[1].len = 1;
 	msg[1].buf = buf;
 
-	ret = i2c_transfer(client->adapter, msg, 2);
+	//mutex_lock(&max8906->iolock);
+	//ret = i2c_smbus_read_byte_data(i2c, reg);
+	//mutex_unlock(&max8906->iolock);
+	//if (ret < 0)
+	//	return ret;
+	//ret &= 0xff;
+	//*dest = ret;
+
+	mutex_lock(&max8906->iolock);
+	ret = i2c_transfer(i2c->adapter, msg, 2);
+	mutex_unlock(&max8906->iolock);
 	if (ret != 2) 
 		return -EIO;
 
-	*data = buf[0];
-	
+	*dest = buf[0];
 	return 0;
 }
+EXPORT_SYMBOL(max8906_read_reg);
 
-static int max8906_write(struct i2c_client *client, u8 reg, u8 data)
+int max8906_bulk_read(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
 {
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
 	int ret;
+
+	mutex_lock(&max8906->iolock);
+	ret = i2c_smbus_read_i2c_block_data(i2c, reg, count, buf);
+	mutex_unlock(&max8906->iolock);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL(max8906_bulk_read);
+
+int max8906_write_reg(struct i2c_client *i2c, u8 reg, u8 value)
+{
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+	int ret=0;
 	u8 buf[2];
 	struct i2c_msg msg[1];
 
 	buf[0] = reg;
-	buf[1] = data;
+	buf[1] = value;
 
-	msg[0].addr = client->addr;
+	msg[0].addr = i2c->addr;
 	msg[0].flags = 0;
 	msg[0].len = 2;
 	msg[0].buf = buf;
 
-	ret = i2c_transfer(client->adapter, msg, 1);
+	mutex_lock(&max8906->iolock);
+	ret = i2c_transfer(i2c->adapter, msg, 1);
+	mutex_unlock(&max8906->iolock);
 	if (ret != 1) 
 		return -EIO;
 
-	if ((client->addr == MAX8906_GPM_ID) && (reg>0x83)&&(reg < 0x8f)) {
-	  pr_info(PREFIX "%s:I: addr 0x%02X reg 0x%02X Succeeded!\n", __func__, client->addr, reg);
+	if ((i2c->addr == MAX8906_GPM_ID) && (reg>0x83)&&(reg < 0x8f)) {
+	  pr_info(PREFIX "%s:I: addr 0x%02X reg 0x%02X Succeeded!\n", __func__, i2c->addr, reg);
 	}
+
+//	mutex_lock(&max8906->iolock);
+//	ret = i2c_smbus_write_byte_data(i2c, reg, value);
+//	mutex_unlock(&max8906->iolock);
+	return ret;
+}
+EXPORT_SYMBOL(max8906_write_reg);
+
+int max8906_bulk_write(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
+{
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+	int ret;
+
+	mutex_lock(&max8906->iolock);
+	ret = i2c_smbus_write_i2c_block_data(i2c, reg, count, buf);
+	mutex_unlock(&max8906->iolock);
+	if (ret < 0)
+		return ret;
+
 	return 0;
 }
+EXPORT_SYMBOL(max8906_bulk_write);
+
+int max8906_update_reg(struct i2c_client *i2c, u8 reg, u8 val, u8 mask)
+{
+	struct max8906_dev *max8906 = i2c_get_clientdata(i2c);
+	int ret;
+
+	mutex_lock(&max8906->iolock);
+	ret = i2c_smbus_read_byte_data(i2c, reg);
+	if (ret >= 0) {
+		u8 old_val = ret & 0xff;
+		u8 new_val = (val & mask) | (old_val & (~mask));
+		ret = i2c_smbus_write_byte_data(i2c, reg, new_val);
+	}
+	mutex_unlock(&max8906->iolock);
+	return ret;
+}
+EXPORT_SYMBOL(max8906_update_reg);
+
+/*
+ * old I2C Interface
+ */
 
 unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 {
@@ -182,7 +244,7 @@ unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 	else 
 		return PMIC_FAIL;
 
-	if (max8906_read(client, reg, data) < 0) { 
+	if (max8906_read_reg(client, reg, data) < 0) { 
 #ifdef PMIC_EXTRA_DEBUG	
 		printk(KERN_ERR "%s -> Failed! (slaveaddr 0x%02x, reg 0x%02x, data 0x%02x)\n",
 					__FUNCTION__, slaveaddr, reg, *data);
@@ -210,7 +272,7 @@ unsigned int pmic_write(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 	else 
 		return PMIC_FAIL;
 
-	if (max8906_write(client, reg, *data) < 0) { 
+	if (max8906_write_reg(client, reg, *data) < 0) { 
 		printk(KERN_ERR "%s -> Failed! (slaveaddr 0x%02x, reg 0x%02x, data 0x%02x)\n",
 					__FUNCTION__, slaveaddr, reg, *data);
 		return PMIC_FAIL;
