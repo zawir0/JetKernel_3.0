@@ -6,7 +6,7 @@
  * 	Copyright (C) 2009 Samsung Electronics Co. Ltd.
  * Multitouch:
  * 	Copyright (C) 2010 Lambertus Gorter <l.gorter@gmail.com>
- * Driver cleanup and optimization:
+ * Complete rewrite:
  * 	Copyright (C) 2011 Tomasz Figa <tomasz.figa at gmail.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -35,83 +35,79 @@
 /*
  * QT5480 register definitions
  */
-
 #define REG_CLASS(reg)		((reg) >> 2)
 #define REG_OFFS(reg)		((reg) & 3)
 
 /* Control registers */
-
-#define	REG_CHIP_ID				0	// byte
-#define	REG_CODE_VERSION			1	// byte
-#define	REG_CALIBRATE				2	// byte
-#define	REG_RESET				3	// byte
-#define	REG_BACKUP_REQUEST			4	// byte
-#define	REG_ADDRESS_POINTER			5	// byte
-#define	REG_EEPROM_CHKSUM_L			6	// byte
-#define REG_EEPROM_CHKSUM_H			7	// byte
-#define	REG_KEY_STATUS_1			8	// byte
+#define	REG_CHIP_ID				0	/* byte */
+#define	REG_CODE_VERSION			1	/* byte */
+#define	REG_CALIBRATE				2	/* byte */
+#define	REG_RESET				3	/* byte */
+#define	REG_BACKUP_REQUEST			4	/* byte */
+#define	REG_ADDRESS_POINTER			5	/* byte */
+#define	REG_EEPROM_CHKSUM_L			6	/* byte */
+#define REG_EEPROM_CHKSUM_H			7	/* byte */
+#define	REG_KEY_STATUS_1			8	/* byte */
 /* Unknown 9 - 13 */
-#define	REG_GENERAL_STATUS_1			14	// byte
-#define	REG_GENERAL_STATUS_2			15	// byte
-#define	REG_TOUCHSCR_0_X			16	// word
-#define	REG_TOUCHSCR_0_Y			18	// word
-#define	REG_TOUCHSCR_1_X			20	// word
-#define	REG_TOUCHSCR_1_Y			22	// word
-#define	REG_SLIDER_POS				20	// 6 bytes
-#define	REG_FORCE_MESURE			26	// byte
-#define	REG_CHANNEL_GATING_INPUT_STATUS		27	// byte
+#define	REG_GENERAL_STATUS_1			14	/* byte */
+#define	REG_GENERAL_STATUS_2			15	/* byte */
+#define	REG_TOUCHSCR_0_X			16	/* word */
+#define	REG_TOUCHSCR_0_Y			18	/* word */
+#define	REG_TOUCHSCR_1_X			20	/* word */
+#define	REG_TOUCHSCR_1_Y			22	/* word */
+#define	REG_SLIDER_POS				20	/* 6 bytes */
+#define	REG_FORCE_MESURE			26	/* byte */
+#define	REG_CHANNEL_GATING_INPUT_STATUS		27	/* byte */
 /* Unknown 28 - 36 */
-#define	REG_MINOR_VERSION			37	// byte
+#define	REG_MINOR_VERSION			37	/* byte */
 /* Unknown 38 - 255 */
-#define	REG_CHANNEL_0_DELTA			256	// 48 words
-#define	REG_CHANNEL_0_REFERENCE			352	// 48 words
+#define	REG_CHANNEL_0_DELTA			256	/* 48 words */
+#define	REG_CHANNEL_0_REFERENCE			352	/* 48 words */
 /* Unknown 448 - 511 */
 
 /* Setup data */
-
-#define	REG_CHANNEL_CONTROL			512	// 48 bytes
-#define	REG_CHANNEL_NEGATIVE_THRESHHOLD		560	// 48 bytes
-#define	REG_CHANNEL_BURST_LENGTH		608	// 48 bytes
-#define	REG_LP_MODE				656	// byte
-#define	REG_MIN_CYCLE_TIME			657	// byte
-#define	REG_AWAKE_TIMEOUT			658	// byte
-#define	REG_TRIGGER_CONTROL			659	// byte
-#define	REG_GUARD_CHANNEL_ENABLE		660	// byte
-#define	REG_TOUCHSCREEN_SETUP			661	// byte
-#define	REG_TOUCHSCREEN_LENGTH			662	// byte
-#define	REG_SLIDER_SETUP			662	// 6 bytes
-#define	REG_TOUCHSCREEN_HYSTERESIS		668	// 6 bytes
-#define	REG_SLIDER_HYSTERESIS			668	// 6 bytes
-#define	REG_GPO_CONTROL				674	// byte
-#define	REG_NDRIFT_SETTING			675	// byte
-#define	REG_PDRIFT_SETTING			676	// byte
-#define	REG_NDIL_SETTING			677	// byte
-#define	REG_SDIL_SETTING			678	// byte
-#define	REG_NEGATIVE_RECALIBRATION_DELAY	679	// byte
-#define	REG_DRIFT_HOLD_TIME			680	// byte
-#define	REG_FORCE_SENSOR_THRESHHOLD		681	// byte
-#define	REG_POSITION_CLIPPING_LIMITS		682	// 2 bytes
-#define	REG_LINEAR_X_OFFSET			684	// 2 bytes
-#define	REG_LINEAR_X_SEGMENTS			686	// 16 bytes
-#define	REG_LINEAR_Y_OFFSET			702	// 2 bytes
-#define	REG_LINEAR_Y_SEGMENTS			704	// 16 bytes
-#define	REG_BURST_CONTROL			720	// byte
-#define	REG_STATUS_MASK				721	// byte
-#define	REG_POSITION_FILTER_CONTROL		722	// byte
-#define	REG_TOUCH_SIZE_RESOLUTION_CONTROL	723	// byte
-#define	REG_TOUCHSCREEN_PLATEAU_CONTROL		724	// byte
-#define	REG_SLEW_RATE_FILTER_CONTROL		725	// byte
-#define	REG_MEDIAN_FILTER_LENGTH		726	// byte
-#define	REG_IIR_FILTER_CONTROL			727	// byte
-#define	REG_TOUCHDOWN_HYSTERESIS		728	// byte
-#define	REG_GESTURE_CONFIG_REGISTERS		734	// 14 bytes
+#define	REG_CHANNEL_CONTROL			512	/* 48 bytes */
+#define	REG_CHANNEL_NEGATIVE_THRESHHOLD		560	/* 48 bytes */
+#define	REG_CHANNEL_BURST_LENGTH		608	/* 48 bytes */
+#define	REG_LP_MODE				656	/* byte */
+#define	REG_MIN_CYCLE_TIME			657	/* byte */
+#define	REG_AWAKE_TIMEOUT			658	/* byte */
+#define	REG_TRIGGER_CONTROL			659	/* byte */
+#define	REG_GUARD_CHANNEL_ENABLE		660	/* byte */
+#define	REG_TOUCHSCREEN_SETUP			661	/* byte */
+#define	REG_TOUCHSCREEN_LENGTH			662	/* byte */
+#define	REG_SLIDER_SETUP			662	/* 6 bytes */
+#define	REG_TOUCHSCREEN_HYSTERESIS		668	/* 6 bytes */
+#define	REG_SLIDER_HYSTERESIS			668	/* 6 bytes */
+#define	REG_GPO_CONTROL				674	/* byte */
+#define	REG_NDRIFT_SETTING			675	/* byte */
+#define	REG_PDRIFT_SETTING			676	/* byte */
+#define	REG_NDIL_SETTING			677	/* byte */
+#define	REG_SDIL_SETTING			678	/* byte */
+#define	REG_NEGATIVE_RECALIBRATION_DELAY	679	/* byte */
+#define	REG_DRIFT_HOLD_TIME			680	/* byte */
+#define	REG_FORCE_SENSOR_THRESHHOLD		681	/* byte */
+#define	REG_POSITION_CLIPPING_LIMITS		682	/* 2 bytes */
+#define	REG_LINEAR_X_OFFSET			684	/* 2 bytes */
+#define	REG_LINEAR_X_SEGMENTS			686	/* 16 bytes */
+#define	REG_LINEAR_Y_OFFSET			702	/* 2 bytes */
+#define	REG_LINEAR_Y_SEGMENTS			704	/* 16 bytes */
+#define	REG_BURST_CONTROL			720	/* byte */
+#define	REG_STATUS_MASK				721	/* byte */
+#define	REG_POSITION_FILTER_CONTROL		722	/* byte */
+#define	REG_TOUCH_SIZE_RESOLUTION_CONTROL	723	/* byte */
+#define	REG_TOUCHSCREEN_PLATEAU_CONTROL		724	/* byte */
+#define	REG_SLEW_RATE_FILTER_CONTROL		725	/* byte */
+#define	REG_MEDIAN_FILTER_LENGTH		726	/* byte */
+#define	REG_IIR_FILTER_CONTROL			727	/* byte */
+#define	REG_TOUCHDOWN_HYSTERESIS		728	/* byte */
+#define	REG_GESTURE_CONFIG_REGISTERS		734	/* 14 bytes */
 
 /*
  * QT5480 register configuration
  */
-
 static u8 qt5480_default_config[] = {
-	// REG_CHANNEL_CONTROL
+	/* REG_CHANNEL_CONTROL */
 	0,	0,	0,	0,
 	0,	0,	0,	0,
 	0,	0,	0,	0,
@@ -125,7 +121,7 @@ static u8 qt5480_default_config[] = {
 	0,	0,	0,	0,
 	0,	0,	0,	0,
 
-	// REG_CHANNEL_NEGATIVE_THRESHHOLD
+	/* REG_CHANNEL_NEGATIVE_THRESHHOLD */
 	48,	48,	48,	48,
 	48,	48,	49,	49,
 	48,	48,	48,	48,
@@ -139,7 +135,7 @@ static u8 qt5480_default_config[] = {
 	48,	48,	48,	48,
 	48,	48,	49,	49,
 
-	// REG_CHANNEL_BURST_LENGTH
+	/* REG_CHANNEL_BURST_LENGTH */
 	56,	44,	48,	48,
 	48,	48,	48,	60,
 	56,	36,	40,	40,
@@ -153,67 +149,67 @@ static u8 qt5480_default_config[] = {
 	60,	52,	56,	56,
 	56,	56,	56,	72,
 
-	20,	// REG_LP_MODE
-	255,	// REG_MIN_CYCLE_TIME
-	50,	// REG_AWAKE_TIMEOUT
-	0,	// REG_TRIGGER_CONTROL
-	48,	// REG_GUARD_CHANNEL_ENABLE
-	22,	// REG_TOUCHSCREEN_SETUP
+	20,	/* REG_LP_MODE */
+	255,	/* REG_MIN_CYCLE_TIME */
+	50,	/* REG_AWAKE_TIMEOUT */
+	0,	/* REG_TRIGGER_CONTROL */
+	48,	/* REG_GUARD_CHANNEL_ENABLE */
+	22,	/* REG_TOUCHSCREEN_SETUP */
 
-	// REG_TOUCHSCREEN_LENGTH / REG_SLIDER_SETUP
+	/* REG_TOUCHSCREEN_LENGTH / REG_SLIDER_SETUP */
 	8,	0,	0,	0,	0,	0,
 
-	// REG_TOUCHSCREEN_HYSTERESIS / REG_SLIDER_HYSTERESIS
+	/* REG_TOUCHSCREEN_HYSTERESIS / REG_SLIDER_HYSTERESIS */
 	0,	0,	0,	0,	0,	0,
 
-	0,	// REG_GPO_CONTROL
-	12,	// REG_NDRIFT_SETTING
-	1,	// REG_PDRIFT_SETTING
-	2,	// REG_NDIL_SETTING
-	0,	// REG_SDIL_SETTING
-	150,	// REG_NEGATIVE_RECALIBRATION_DELAY
-	5,	// REG_DRIFT_HOLD_TIME
-	255,	// REG_FORCE_SENSOR_THRESHHOLD
+	0,	/* REG_GPO_CONTROL */
+	12,	/* REG_NDRIFT_SETTING */
+	1,	/* REG_PDRIFT_SETTING */
+	2,	/* REG_NDIL_SETTING */
+	0,	/* REG_SDIL_SETTING */
+	150,	/* REG_NEGATIVE_RECALIBRATION_DELAY */
+	5,	/* REG_DRIFT_HOLD_TIME */
+	255,	/* REG_FORCE_SENSOR_THRESHHOLD */
 
-	// REG_POSITION_CLIPPING_LIMITS
+	/* REG_POSITION_CLIPPING_LIMITS */
 	0,	0,
 
-	// REG_LINEAR_X_OFFSET
+	/* REG_LINEAR_X_OFFSET */
 	0,	0,
 
-	// REG_LINEAR_X_SEGMENTS
+	/* REG_LINEAR_X_SEGMENTS */
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 
-	// REG_LINEAR_Y_OFFSET
+	/* REG_LINEAR_Y_OFFSET */
 	0,	0,
 
-	// REG_LINEAR_Y_SEGMENTS
+	/* REG_LINEAR_Y_SEGMENTS */
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 	64,	64,	64,	64,
 
-	2,	// REG_BURST_CONTROL
-	14,	// REG_STATUS_MASK
-	8,	// REG_POSITION_FILTER_CONTROL
-	3,	// REG_TOUCH_SIZE_RESOLUTION_CONTROL
-	0,	// REG_TOUCHSCREEN_PLATEAU_CONTROL
-	0,	// REG_SLEW_RATE_FILTER_CONTROL
-	1,	// REG_MEDIAN_FILTER_LENGTH
-	0,	// REG_IIR_FILTER_CONTROL
-	0,	// REG_TOUCHDOWN_HYSTERESIS
+	2,	/* REG_BURST_CONTROL */
+	14,	/* REG_STATUS_MASK */
+	8,	/* REG_POSITION_FILTER_CONTROL */
+	3,	/* REG_TOUCH_SIZE_RESOLUTION_CONTROL */
+	0,	/* REG_TOUCHSCREEN_PLATEAU_CONTROL */
+	0,	/* REG_SLEW_RATE_FILTER_CONTROL */
+	1,	/* REG_MEDIAN_FILTER_LENGTH */
+	0,	/* REG_IIR_FILTER_CONTROL */
+	0,	/* REG_TOUCHDOWN_HYSTERESIS */
 
-	// 729 - 733 (Unknown)
+	/* 729 - 733 (Unknown) */
 	0,	25,	0,	0,	26,
 
-	// REG_GESTURE_CONFIG_REGISTERS
+	/* REG_GESTURE_CONFIG_REGISTERS */
 	0,	6,	16,	6,	16,	16,	16,
 	0,	75,	0,	50,	0,	0,	0,
 
-	// 748++ (Unknown)
+	/* 748++ (Unknown) */
 	13,	10,	0,	0,	0
 };
 
@@ -222,7 +218,6 @@ static u8 qt5480_default_config[] = {
 /*
  * Debugging macros
  */
-
 //#define QT5480_DEBUG
 //#define QT5480_DEBUG_I2C
 //#define QT5480_DEBUG_DEV
@@ -254,9 +249,6 @@ static u8 qt5480_default_config[] = {
 /*
  * Helper definitions
  */
-
-#define QT5480_I2C_ADDR			0x60
-#define QT5480_BL_I2C_ADDR		0x4A
 #define QT5480_CHIP_ID			0x0F
 #define QT5480_MAX_XC			1023
 #define QT5480_MAX_YC			1023
@@ -270,24 +262,13 @@ static u8 qt5480_default_config[] = {
 /*
  * Touch states
  */
-
 #define QT5480_NONE		0
 #define QT5480_MOVE		1
 #define QT5480_RELEASE		2
 
 /*
- * QT5480 only be able to send a data packet consists of five bytes
+ * Structures used by the driver
  */
-
-#define BASIC_READ_COUNT	5
-
-/*
- * Driver data
- */
-
-#define SINGLETOUCH_FLAG	0x01
-#define MULTITOUCH_FLAG		0x02
-
 struct qt5480_touch {
 	int status;
 	int pos_x;
@@ -325,7 +306,6 @@ struct qt5480_ctrl_word {
 /*
  * Helper routines
  */
-
 static u16 qt5480_calc_crc16(u8 val, u16 prev)
 {
 	const u32 crc_poly = 0x00008005;
@@ -358,7 +338,6 @@ static u16 qt5480_calc_cfg_chksum(u8 *data)
 /*
  * I2C device access
  */
-
 static inline int qt5480_i2c_write(struct qt5480 *qt, u16 reg, u8 data)
 {
 	u8 wbuf[3] = { reg & 0xFF, reg >> 8, data };
@@ -411,7 +390,6 @@ static inline int qt5480_i2c_read_regs(struct qt5480 *qt,
 /*
  * Hardware configuration
  */
-
 static void qt5480_power_up(struct qt5480 *qt)
 {
 	int timeout = 100, ret;
@@ -436,19 +414,12 @@ static void qt5480_power_up(struct qt5480 *qt)
 		dev_err(qt->dev, "Device power up timed out\n");
 }
 
-#if 0 /* Unused yet */
-static void qt5480_power_down(struct qt5480 *qt)
-{
-	gpio_set_value(qt->pdata->en_gpio, qt->pdata->en_inverted);
-}
-#endif
-
 static int qt5480_check_chip_id(struct qt5480 *qt)
 {
 	struct qt5480_ctrl_word buf;
 	int ret;
 
-	ret = qt5480_i2c_write(qt, REG_LP_MODE, 32); //Write LPmode
+	ret = qt5480_i2c_write(qt, REG_LP_MODE, 32); /*Write LPmode */
 	if(ret < 0) {
 		dev_err(qt->dev,
 			"write LP Register address failed(%d)!\n", ret);
@@ -618,7 +589,6 @@ static int qt5480_init_hw(struct qt5480 *qt)
 /*
  * Input events processing
  */
-
 static void qt5480_report_input(struct qt5480 *qt)
 {
 	struct qt5480_touch *touch = qt->touch;
@@ -654,6 +624,7 @@ static void qt5480_handle_data(struct qt5480 *qt, struct qt5480_ctrl_word *ctrl)
 {
 	struct qt5480_touch *touch = qt->touch;
 	int id;
+	int report = 0;
 
 	switch (ctrl->class) {
 	case 3:
@@ -667,8 +638,10 @@ static void qt5480_handle_data(struct qt5480 *qt, struct qt5480_ctrl_word *ctrl)
 		}
 
 		if (qt->palm_touch) {
+			qt->ignore = 1;
 			qt->palm_touch = 0;
 			qt5480_i2c_write(qt, REG_CALIBRATE, 0x55);
+			return;
 		}
 
 		/* Tracking lost or calibrating*/
@@ -680,19 +653,28 @@ static void qt5480_handle_data(struct qt5480 *qt, struct qt5480_ctrl_word *ctrl)
 		/* contacts */
 		if (!(ctrl->data[3] & 0x01)) {
 			touch[0].status = QT5480_RELEASE;
-			qt5480_report_input(qt);
+			report = 1;
 		}
 
 		if (!(ctrl->data[3] & 0x02)) {
 			touch[1].status = QT5480_RELEASE;
-			qt5480_report_input(qt);
+			report = 1;
 		}
 
 		/* Error bit */
 		if (ctrl->data[3] & 0x20) {
-			touch[0].status = 0;
-			touch[1].status = 0;
+			if (touch[0].status) {
+				touch[0].status = QT5480_RELEASE;
+				report = 1;
+			}
+			if (touch[1].status) {
+				touch[1].status = QT5480_RELEASE;
+				report = 1;
+			}
 		}
+
+		if (report)
+			qt5480_report_input(qt);
 
 		break;
 
@@ -747,69 +729,30 @@ static irqreturn_t qt5480_irq_handler(int irq, void *dev_id)
 /*
  * Power management
  */
-
 static int qt5480_do_suspend(struct qt5480 *qt)
 {
 	int ret = 0;
-#ifdef DEBUG_REGISTER_WRITES
-	struct qt5480_ctrl_word ctrl;
-#endif
 
-	// Disable interrupts
+	/* Disable interrupts */
 	ret = qt5480_i2c_write(qt, REG_STATUS_MASK, 0);
 	if(ret < 0) {
 		dev_err(qt->dev, "Failed to write status mask register\n");
 		return ret;
 	}
 
-	// Set Awake Timeout
+	/* Set Awake Timeout */
 	ret = qt5480_i2c_write(qt, REG_AWAKE_TIMEOUT, 5);
 	if(ret < 0) {
 		dev_err(qt->dev, "Failed to write awake timeout register\n");
 		return ret;
 	}
 
-#ifdef DEBUG_REGISTER_WRITES
-	// Verify Awake Timeout register
-	ctrl.class = REG_CLASS(REG_AWAKE_TIMEOUT);
-	ret = qt5480_i2c_read_regs(qt, &ctrl);
-	if(ret < 0) {
-		dev_err(qt->dev, "Failed to read awake timeout register\n");
-		return ret;
-	}
-
-	DBG("Awake Timeout read: (%x)\n", read_buf[3]);
-
-	if (ctrl.data[REG_OFFS(REG_AWAKE_TIMEOUT)] != 5) {
-		dev_err(qt->dev, "Failed to write awake timeout register\n");
-		return -EIO;
-	}
-#endif
-
-	// Enter LP mode
-	ret = qt5480_i2c_write(qt, REG_LP_MODE, 0); // LP Mode
+	/* Enter LP mode */
+	ret = qt5480_i2c_write(qt, REG_LP_MODE, 0); /* LP Mode */
 	if(ret < 0) {
 		dev_err(qt->dev, "Failed to write LP mode register\n");
 		return ret;
 	}
-
-
-#ifdef DEBUG_REGISTER_WRITES
-	// Verify Awake Timeout register
-	ctrl.class = REG_CLASS(REG_LP_MODE);
-	ret = qt5480_i2c_read_regs(qt, &ctrl);
-	if(ret < 0) {
-		dev_err(qt->dev, "Failed to read LP mode register\n");
-		return ret;
-	}
-
-	DBG("Awake Timeout read: (%x)\n", read_buf[3]);
-
-	if (ctrl.data[REG_OFFS(REG_LP_MODE)] != 0) {
-		dev_err(qt->dev, "Failed to write LP mode register\n");
-		return -EIO;
-	}
-#endif
 
 	return 0;
 }
@@ -818,14 +761,14 @@ static int qt5480_do_resume(struct qt5480 *qt)
 {
 	int ret;
 
-	// Exit LP mode
+	/* Exit LP mode */
 	ret = qt5480_i2c_write(qt, REG_LP_MODE, qt->config[REG_LP_MODE - 512]);
 	if(ret < 0) {
 		dev_err(qt->dev, "Failed to write LP mode register\n");
 		return ret;
 	}
 
-	// Reset Awake Timeout register
+	/* Reset Awake Timeout register */
 	ret = qt5480_i2c_write(qt, REG_AWAKE_TIMEOUT,
 					qt->config[REG_AWAKE_TIMEOUT - 512]);
 	if(ret < 0) {
@@ -833,7 +776,7 @@ static int qt5480_do_resume(struct qt5480 *qt)
 		return ret;
 	}
 
-	// Restore interrupt mask
+	/* Restore interrupt mask */
 	ret = qt5480_i2c_write(qt, REG_STATUS_MASK,
 					qt->config[REG_STATUS_MASK - 512]);
 	if(ret < 0) {
@@ -841,7 +784,7 @@ static int qt5480_do_resume(struct qt5480 *qt)
 		return ret;
 	}
 
-	// Request calibration
+	/* Request calibration */
 	ret = qt5480_i2c_write(qt, REG_CALIBRATE, 0x55);
 	if(ret < 0) {
 		dev_err(qt->dev, "Failed to issue calibration request\n");
@@ -896,7 +839,6 @@ static const struct dev_pm_ops qt5480_pm_ops = {
 /*
  * I2C Driver
  */
-
 static int __devinit qt5480_probe(struct i2c_client *client,
 						const struct i2c_device_id *id)
 {
@@ -1032,7 +974,6 @@ static struct i2c_driver qt5480_driver = {
 /*
  * Module
  */
-
 static int __init qt5480_init(void)
 {
 	return i2c_add_driver(&qt5480_driver);
