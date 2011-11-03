@@ -667,6 +667,9 @@ static struct i2c_board_info spica_audio_i2c_devs[] __initdata = {
 	}, {
 		.type		= "max9877",
 		.addr		= 0x4d,
+//	}, {
+//		.type		= "max9880",
+//		.addr		= 0x20,
 	},
 };
 
@@ -975,39 +978,40 @@ static struct platform_device mmc2_fixed_voltage = {
  * Framebuffer
  */
 
-static struct s3c_fb_pd_win spica_fb_win[] = {
+static struct s3c_fb_pd_win jet_fb_win[] = {
 	[0] = {
 		.win_mode	= {
-			.left_margin	= 10,
-			.right_margin	= 10,
-			.upper_margin	= 3,
-			.lower_margin	= 8,
-			.hsync_len	= 10,
+		.win_mode	= {
+			.left_margin	= 64,
+			.right_margin	= 62,
+			.upper_margin	= 8,
+			.lower_margin	= 6,
+			.hsync_len	= 2,
 			.vsync_len	= 2,
-			.xres		= 320,
-			.yres		= 480,
+			.xres		= 480,
+			.yres		= 800,
 		},
 		.max_bpp	= 24,
-		.default_bpp	= 24,
-		.virtual_y	= 480 * 2,
-		.virtual_x	= 320,
+		.default_bpp	= 16,
+		.virtual_y	= 800 * 2,
+		.virtual_x	= 480,
 	},
 #ifdef SECOND_FB
 	[1] = {
 		.win_mode	= {
-			.left_margin	= 10,
-			.right_margin	= 10,
-			.upper_margin	= 3,
-			.lower_margin	= 8,
-			.hsync_len	= 10,
+			.left_margin	= 64,
+			.right_margin	= 62,
+			.upper_margin	= 8,
+			.lower_margin	= 6,
+			.hsync_len	= 2,
 			.vsync_len	= 2,
-			.xres		= 320,
-			.yres		= 480,
+			.xres		= 480,
+			.yres		= 800,
 		},
 		.max_bpp	= 24,
 		.default_bpp	= 16,
-		.virtual_y	= 480 * 2,
-		.virtual_x	= 320,
+		.virtual_y	= 800 * 2,
+		.virtual_x	= 480,
 	},
 #endif
 };
@@ -1019,9 +1023,9 @@ static void spica_fb_setup_gpio(void)
 
 static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
 	.setup_gpio	= spica_fb_setup_gpio,
-	.win[0]		= &spica_fb_win[0],
+	.win[0]		= &jet_fb_win[0],
 #ifdef SECOND_FB
-	.win[1]		= &spica_fb_win[1],
+	.win[1]		= &jet_fb_win[1],
 #endif
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC

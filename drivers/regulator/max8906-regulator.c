@@ -1449,146 +1449,24 @@ static __devinit int max8906_pmic_probe(struct platform_device *pdev)
 	/* For unused GPIO NOT marked as -1 (thereof equal to 0)  WARN_ON */
 	/* will be displayed */
 
-	/* Check if MAX8906 voltage selection GPIOs are defined */
-//	if (gpio_is_valid(pdata->buck1_set1) &&
-//	    gpio_is_valid(pdata->buck1_set2)) {
-		/* Check if SET1 is not equal to 0 */
-//		if (!pdata->buck1_set1) {
-//			printk(KERN_ERR "MAX8906 SET1 GPIO defined as 0 !\n");
-//			WARN_ON(!pdata->buck1_set1);
-//			ret = -EIO;
-//			goto err_free_mem;
-//		}
-		/* Check if SET2 is not equal to 0 */
-/*
-		if (!pdata->buck1_set2) {
-			printk(KERN_ERR "MAX8906 SET2 GPIO defined as 0 !\n");
-			WARN_ON(!pdata->buck1_set2);
-			ret = -EIO;
-			goto err_free_mem;
-		}
-
-		gpio_request(pdata->buck1_set1, "MAX8906 BUCK1_SET1");
-		gpio_direction_output(pdata->buck1_set1,
-				      max8906reg->buck1_idx & 0x1);
-
-
-		gpio_request(pdata->buck1_set2, "MAX8906 BUCK1_SET2");
-		gpio_direction_output(pdata->buck1_set2,
-				      (max8906reg->buck1_idx >> 1) & 0x1);
-*/
-		/* Set predefined value for BUCK1 register 1 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck1_voltage1 / 1000))
-			i++;
-		max8906reg->buck1_vol[0] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE1, i);
-		if (ret)
-			goto err_free_mem;
-*/
-		/* Set predefined value for BUCK1 register 2 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck1_voltage2 / 1000))
-			i++;
-
-		max8906reg->buck1_vol[1] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE2, i);
-		if (ret)
-			goto err_free_mem;
-*/
-		/* Set predefined value for BUCK1 register 3 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck1_voltage3 / 1000))
-			i++;
-
-		max8906reg->buck1_vol[2] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE3, i);
-		if (ret)
-			goto err_free_mem;
-*/
-		/* Set predefined value for BUCK1 register 4 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck1_voltage4 / 1000))
-			i++;
-
-		max8906reg->buck1_vol[3] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK1_VOLTAGE4, i);
-		if (ret)
-			goto err_free_mem;
-
-	}
-*/
-//	if (gpio_is_valid(pdata->buck2_set3)) {
-		/* Check if SET3 is not equal to 0 */
-/*
-		if (!pdata->buck2_set3) {
-			printk(KERN_ERR "MAX8906 SET3 GPIO defined as 0 !\n");
-			WARN_ON(!pdata->buck2_set3);
-			ret = -EIO;
-			goto err_free_mem;
-		}
-		gpio_request(pdata->buck2_set3, "MAX8906 BUCK2_SET3");
-		gpio_direction_output(pdata->buck2_set3,
-				      max8906reg->buck2_idx & 0x1);
-*/
-		/* BUCK2 register 1 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck2_voltage1 / 1000))
-			i++;
-		max8906reg->buck2_vol[0] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE1, i);
-		if (ret)
-			goto err_free_mem;
-*/
-		/* BUCK2 register 2 */
-/*
-		i = 0;
-		while (buck12_voltage_map_desc.min +
-		       buck12_voltage_map_desc.step*i
-		       < (pdata->buck2_voltage2 / 1000))
-			i++;
-		printk(KERN_ERR "i2:%d, buck2_idx:%d\n", i, max8906reg->buck2_idx);
-		max8906reg->buck2_vol[1] = i;
-		ret = max8906_write_reg(i2c, MAX8906_REG_BUCK2_VOLTAGE2, i);
-		if (ret)
-			goto err_free_mem;
-	}
-
 	for (i = 0; i < pdata->num_regulators; i++) {
 		const struct voltage_map_desc *desc;
 		int id = pdata->regulators[i].id;
-		int index = id - MAX8906_LDO2;
 
 		desc = ldo_voltage_map[id];
-		if (desc && regulators[index].ops != &max8906_others_ops) {
+		if (desc) {
 			int count = (desc->max - desc->min) / desc->step + 1;
-			regulators[index].n_voltages = count;
+			regulators[id].n_voltages = count;
 		}
-		rdev[i] = regulator_register(&regulators[index], max8906reg->dev,
+		rdev[i] = regulator_register(&regulators[id], max8906reg->dev,
 				pdata->regulators[i].initdata, max8906reg);
 		if (IS_ERR(rdev[i])) {
 			ret = PTR_ERR(rdev[i]);
-			dev_err(max8906reg->dev, "regulator init failed\n");
+			dev_err(max8906reg->dev, "regulator init failed for %d\n",id);
 			rdev[i] = NULL;
 			goto err;
 		}
 	}
-*/
 
 	return 0;
 err:
