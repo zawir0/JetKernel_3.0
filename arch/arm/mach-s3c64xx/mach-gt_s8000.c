@@ -189,7 +189,7 @@
 #define IRQ_ONEDRAM		IRQ_EINT(0)	//J
 //#define IRQ_WLAN		IRQ_EINT(1)
 /* Rising edge */
-//#define IRQ_AKM8973		IRQ_EINT(2)
+#define IRQ_MSENSE		IRQ_EINT(2)
 //#define IRQ_BMA023		IRQ_EINT(3)
 /* Both edges */
 //#define IRQ_SIM_DETECT		IRQ_EINT(4)
@@ -269,15 +269,50 @@ static struct s3c2410_uartcfg spica_uartcfgs[] __initdata = {
  * I2C devices
  */
 
-/* I2C 0 (hardware) -	FSA9480 (USB transceiver),
- *			BMA023 (accelerometer),
- * 			AK8973B (magnetometer) */
-static struct s3c2410_platform_i2c spica_misc_i2c __initdata = {
+/* I2C 0 (hardware) - Sensors, MCam, VGACam
+ *	BMA023 (accelerometer),
+ * 	AK8973B (magnetometer) 
+ */
+static struct akm8973_platform_data spica_akm8973_pdata = {
+	.gpio_RST = GPIO_MSENSE_RST,
+};
+
+static struct i2c_board_info jet_sensor_i2c_devs[] __initdata = {
+	{
+		.type		= "bma023",
+		.addr		= 0x38,
+		.irq		= IRQ_MSENSE,	//IRQ_BMA023,
+	}, {
+		.type		= "akm8973",
+		.addr		= 0x1c,
+//		.irq		= IRQ_AKM8973,
+		.platform_data	= &spica_akm8973_pdata,
+	}
+};
+static struct s3c2410_platform_i2c jet_sensor_i2c __initdata = {
 	.flags		= 0,
 	.slave_addr	= 0x10,
 	.frequency	= 100*1000,
 	.sda_delay	= 100,
 	.bus_num	= 0,
+};
+
+/* I2C 2 (GPIO) - uUSB switch (USBSW)
+ *	FSA9480	
+ */
+static struct i2c_gpio_platform_data jet_usbsw_i2c_pdata = {
+	.sda_pin		= GPIO_USBSW_SDA_3V0,
+	.scl_pin		= GPIO_USBSW_SCL_3V0,
+	.udelay			= 5, // 2,	/* 250kHz */ 	//3,	/* 166KHz */		
+	.sda_is_open_drain	= 0,
+	.scl_is_open_drain	= 0,
+	.scl_is_output_only	= 1,
+};
+
+static struct platform_device jet_usbsw_i2c = {
+	.name			= "i2c-gpio",
+	.id			= 2,
+	.dev.platform_data	= &jet_usbsw_i2c_pdata,
 };
 
 static bool spica_usb_connected = 0;
@@ -295,7 +330,6 @@ static void spica_battery_notify(void)
 
 	if (spica_usb_connected)
 		supply = SPICA_BATTERY_USB;
-
 	if (spica_ac_connected)
 		supply = SPICA_BATTERY_AC;
 
@@ -319,57 +353,62 @@ static struct fsa9480_platform_data jet_fsa9480_pdata = {
 	.charger_cb	= spica_ac_callback,
 };
 
-static struct akm8973_platform_data spica_akm8973_pdata = {
-	.gpio_RST = GPIO_MSENSE_RST,
-};
-
 static struct i2c_board_info jet_usbsw_i2c_devs[] __initdata = {
 	{
 		.type		= "fsa9480",
 		.addr		= 0x25,
 		.irq		= IRQ_FSA9480,
 		.platform_data	= &jet_fsa9480_pdata,
-/*	}, {
-		.type		= "bma023",
-		.addr		= 0x38,
-		.irq		= IRQ_BMA023,
-	}, {
-		.type		= "akm8973",
-		.addr		= 0x1c,
-		.irq		= IRQ_AKM8973,
-		.platform_data	= &spica_akm8973_pdata,
-*/
 	}
 };
 
-/* I2C 1 (hardware) -	UNKNOWN (camera sensor) */
-static struct s3c2410_platform_i2c spica_cam_i2c __initdata = {
-	.flags		= 0,
-	.slave_addr	= 0x10,
-	.frequency	= 100*1000,
-	.sda_delay	= 100,
-	.bus_num	= 1,
+
+/* I2C 3 (GPIO) - FM, CamLDO
+ *	MAX9877AERP-T (audio amplifier),
+ *	AK4671EG-L (audio codec) 
+ */
+static struct i2c_gpio_platform_data jet_fm_i2c_pdata = {
+	.sda_pin		= GPIO_FM_I2C_SDA,
+	.scl_pin		= GPIO_FM_I2C_SCL,
+	.udelay			= 2, /* 250KHz */
 };
 
-static struct i2c_board_info spica_cam_i2c_devs[] __initdata = {
-	/* TODO */
+static struct platform_device jet_fm_i2c = {
+	.name			= "i2c-gpio",
+	.id			= 3,
+	.dev.platform_data	= &jet_fm_i2c_pdata,
 };
 
+static struct ak4671_platform_data spica_ak4671_pdata = {
+	.gpio_npdn = GPIO_MAX8906_AMP_EN,		// previously AUDIO_EN
+};
 
-//
-// P M I C
-//
+static struct i2c_board_info jet_fm_i2c_devs[] __initdata = {
+	{
+		.type		= "ak4671",
+		.addr		= 0x12,
+		.platform_data	= &spica_ak4671_pdata,
+	}, {
+		.type		= "max9877",
+		.addr		= 0x4d,
+	}
+};
 
-/* I2C 2 (GPIO) -	MAX8906 (Power Management IC / voltage regulator) */
+/* I2C 4 (GPIO) - PMIC 
+ *	MAX8906 (Power Management IC / voltage regulator) 
+ */
 static struct i2c_gpio_platform_data jet_pmic_i2c_pdata = {
 	.sda_pin		= GPIO_PWR_I2C_SDA,
 	.scl_pin		= GPIO_PWR_I2C_SCL,
-	.udelay			= 2, /* 250KHz */
+	.udelay			= 5, // 2,	/* 250KHz */		
+	.sda_is_open_drain	= 0,
+	.scl_is_open_drain	= 0,
+	.scl_is_output_only	= 1,
 };
 
 static struct platform_device jet_pmic_i2c = {
 	.name			= "i2c-gpio",
-	.id			= 2,
+	.id			= 4,
 	.dev.platform_data	= &jet_pmic_i2c_pdata,
 };
 
@@ -646,6 +685,7 @@ static struct max8906_platform_data jet_max8906_pdata = {
 	.lben		= 1, /* Enable low battery alarm */
 };
 
+
 static struct i2c_board_info jet_pmic_i2c_devs[] __initdata = {
 	{
 		.type		= "max8906",
@@ -654,49 +694,20 @@ static struct i2c_board_info jet_pmic_i2c_devs[] __initdata = {
 	},
 };
 
-/* I2C 3 (GPIO) -	MAX9877AERP-T (audio amplifier),
- *			AK4671EG-L (audio codec) */
-static struct i2c_gpio_platform_data spica_audio_i2c_pdata = {
-	.sda_pin		= GPIO_FM_I2C_SDA,
-	.scl_pin		= GPIO_FM_I2C_SCL,
-	.udelay			= 2, /* 250KHz */
-};
 
-static struct platform_device spica_audio_i2c = {
-	.name			= "i2c-gpio",
-	.id			= 3,
-	.dev.platform_data	= &spica_audio_i2c_pdata,
-};
-
-static struct ak4671_platform_data spica_ak4671_pdata = {
-	.gpio_npdn = GPIO_MAX8906_AMP_EN,		// previously AUDIO_EN
-};
-
-static struct i2c_board_info spica_audio_i2c_devs[] __initdata = {
-	{
-		.type		= "ak4671",
-		.addr		= 0x12,
-		.platform_data	= &spica_ak4671_pdata,
-	}, {
-		.type		= "max9877",
-		.addr		= 0x4d,
-//	}, {
-//		.type		= "max9880",
-//		.addr		= 0x20,
-	},
-};
-
-/* I2C 4 (GPIO) -	AT42QT5480-CU (touchscreen controller) */
-static struct i2c_gpio_platform_data jet_fm_i2c_pdata = {
-	.sda_pin		= GPIO_FM_I2C_SDA,
-	.scl_pin		= GPIO_FM_I2C_SCL,
+/* I2C 4 (GPIO) - Audio codec, VGACam
+ * 	MAX8977 (Audio codec) 
+ */
+static struct i2c_gpio_platform_data jet_audio_i2c_pdata = {
+	.sda_pin		= GPIO_AP_SDA_1_8V,
+	.scl_pin		= GPIO_AP_SCL_1_8V,
 	.udelay			= 6, /* 83,3KHz */
 };
 
-static struct platform_device spica_touch_i2c = {
+static struct platform_device jet_audio_i2c = {
 	.name			= "i2c-gpio",
 	.id			= 4,
-	.dev.platform_data	= &jet_fm_i2c_pdata,
+	.dev.platform_data	= &jet_audio_i2c_pdata,
 };
 
 static struct qt5480_platform_data spica_qt5480_pdata = {
@@ -706,14 +717,21 @@ static struct qt5480_platform_data spica_qt5480_pdata = {
 	.en_inverted	= 0,
 };
 
-static struct i2c_board_info spica_fm_i2c_devs[] __initdata = {
+static struct i2c_board_info jet_audio_i2c_devs[] __initdata = {
 	{
 		.type		= "qt5480_ts",
 		.addr		= 0x30,
-		.irq		= IRQ_QT5480,
+//		.irq		= IRQ_QT5480,
 		.platform_data	= &spica_qt5480_pdata,
 	}
 };
+
+
+
+
+
+
+
 
 /*
  * Reserved memory (FIXME: Throw this shit away!)
@@ -1102,6 +1120,7 @@ static struct gpio_keys_button spica_gpio_keys_data[] = {
 		.debounce_interval	= 5,
 		.type                   = EV_KEY,
 		.wakeup			= 1,
+/*
 	}, {
 		.gpio			= GPIO_HOLD_KEY_N,
 		.code			= 251,
@@ -1110,6 +1129,7 @@ static struct gpio_keys_button spica_gpio_keys_data[] = {
 		.debounce_interval	= 5,
 		.type                   = EV_KEY,
 		.wakeup			= 1,
+*/
 	},
 };
 
@@ -1533,8 +1553,8 @@ static struct resource spica_wlan_resources[] = {
 	{
 		.name	= "bcmdhd_wlan_irq",
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_LOWLEVEL,
-		.start	= IRQ_WLAN,
-		.end	= IRQ_WLAN,
+		.start	= GPIO_WLAN_HOST_WAKE, // IRQ_WLAN,
+		.end	= GPIO_WLAN_HOST_WAKE, // IRQ_WLAN,
 	},
 };
 
@@ -1665,7 +1685,7 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id		= S3C_VENDOR_ID,
 	.product_id		= S3C_UMS_PRODUCT_ID,
 	.manufacturer_name	= "Samsung",
-	.product_name		= "Galaxy GT-I5700",
+	.product_name		= "Galaxy GT-S8000",
 	.serial_number		= device_serial,
 	.num_products		= ARRAY_SIZE(usb_products),
 	.products		= usb_products,
@@ -1747,7 +1767,7 @@ static struct dpram_platform_data spica_dpram_pdata = {
 	.gpio_usim_boot		= GPIO_USIM_BOOT,
 	.gpio_pda_active	= GPIO_PDA_ACTIVE,
 	.gpio_onedram_int_n	= GPIO_ONEDRAM_INT_N,
-	.gpio_sim_detect_n	= GPIO_SIM_DETECT_N,
+//	.gpio_sim_detect_n	= GPIO_SIM_DETECT_N,	// FIXME: How to detect SIM?
 };
 
 static struct platform_device spica_dpram_device = {
@@ -1917,17 +1937,17 @@ static struct platform_device *spica_devices[] __initdata = {
 	&s3c_device_hsmmc2,
 	&s3c_device_rtc,
 	&s3c_device_i2c0,
-	&s3c_device_i2c1,
 	&s3c_device_fb,
+	&jet_pmic_i2c,
+	&jet_usbsw_i2c,
 	&s3c_device_usb_hsotg,
 	&spica_usb_rndis,
 	&spica_usb_mass_storage,
 	&spica_android_usb,
 	&s3c_device_onenand,
 	&samsung_device_keypad,
-	&jet_pmic_i2c,
-	&spica_audio_i2c,
-	&spica_touch_i2c,
+	&jet_fm_i2c,
+	&jet_audio_i2c,
 	&spica_s6d05a,
 	&spica_ram_console,
 	&spica_gpio_keys,
@@ -2248,7 +2268,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPO0_MEM0_NCS2, S3C_PIN_PULL(NONE),
 
 	/* Inputs */
-	S3C_PIN(GPIO_VREG_MSMP_26V), S3C_PIN_IN, S3C_PIN_PULL(NONE),
+//	S3C_PIN(GPIO_VREG_MSMP_26V), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BOOT_MODE), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_LCD_ID), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 
@@ -2294,7 +2314,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_AP_SDA_1_8V), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 
 	/* EINTs */
-	S3C_PIN(GPIO_HOLD_KEY_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
+//	S3C_PIN(GPIO_HOLD_KEY_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_TA_SEL), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 //	S3C_PIN(GPIO_TOUCH_INT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BT_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
@@ -2303,7 +2323,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C_PIN(GPIO_MSENSE_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ACC_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_SIM_DETECT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
+//	S3C_PIN(GPIO_SIM_DETECT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_POWER_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_TF_DETECT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PHONE_ACTIVE), S3C_PIN_IN, S3C_PIN_PULL(NONE),
@@ -2543,18 +2563,17 @@ static void __init spica_machine_init(void)
 	s3c_pm_init();
 
 	/* Register I2C devices */
-	s3c_i2c0_set_platdata(&spica_misc_i2c);
-	i2c_register_board_info(spica_misc_i2c.bus_num, jet_usbsw_i2c_devs,
-					ARRAY_SIZE(jet_usbsw_i2c_devs));
-	s3c_i2c1_set_platdata(&spica_cam_i2c);
-	i2c_register_board_info(spica_cam_i2c.bus_num, spica_cam_i2c_devs,
-					ARRAY_SIZE(spica_cam_i2c_devs));
+	s3c_i2c0_set_platdata(&jet_sensor_i2c);
+	i2c_register_board_info(jet_sensor_i2c.bus_num, jet_sensor_i2c_devs,
+					ARRAY_SIZE(jet_sensor_i2c_devs));
 	i2c_register_board_info(jet_pmic_i2c.id, jet_pmic_i2c_devs,
 					ARRAY_SIZE(jet_pmic_i2c_devs));
-	i2c_register_board_info(spica_audio_i2c.id, spica_audio_i2c_devs,
-					ARRAY_SIZE(spica_audio_i2c_devs));
-	i2c_register_board_info(spica_touch_i2c.id, spica_fm_i2c_devs,
-					ARRAY_SIZE(spica_fm_i2c_devs));
+	i2c_register_board_info(jet_usbsw_i2c.id, jet_usbsw_i2c_devs,
+					ARRAY_SIZE(jet_usbsw_i2c_devs));
+	i2c_register_board_info(jet_fm_i2c.id, jet_fm_i2c_devs,
+					ARRAY_SIZE(jet_fm_i2c_devs));
+	i2c_register_board_info(jet_audio_i2c.id, jet_audio_i2c_devs,
+					ARRAY_SIZE(jet_audio_i2c_devs));
 
 	/* Setup framebuffer */
 	s3c_fb_set_platdata(&spica_lcd_pdata);
