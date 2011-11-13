@@ -582,9 +582,6 @@ void bcmsdh_oob_intr_set(bool enable)
 	static bool curstate = 1;
 	unsigned long flags;
 
-	if (!sdhcinfo)
-		return;
-
 	spin_lock_irqsave(&sdhcinfo->irq_lock, flags);
 	if (curstate != enable) {
 		if (enable)
@@ -612,6 +609,13 @@ static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 	dhdsdio_isr((void *)dhdp->bus);
 
 	return IRQ_HANDLED;
+}
+
+void *bcmsdh_get_drvdata(void)
+{
+	if (!sdhcinfo)
+		return NULL;
+	return dev_get_drvdata(sdhcinfo->dev);
 }
 
 int bcmsdh_register_oob_intr(void * dhdp)

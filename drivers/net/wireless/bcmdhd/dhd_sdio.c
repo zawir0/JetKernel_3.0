@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_sdio.c 285933 2011-09-23 21:45:31Z $
+ * $Id: dhd_sdio.c 288105 2011-10-06 01:58:02Z $
  */
 
 #include <typedefs.h>
@@ -468,7 +468,7 @@ static void dhdsdio_sdtest_set(dhd_bus_t *bus, uint8 count);
 #endif
 
 #ifdef DHD_DEBUG
-static int dhdsdio_checkdied(dhd_bus_t *bus, uint8 *data, uint size);
+static int dhdsdio_checkdied(dhd_bus_t *bus, char *data, uint size);
 static int dhd_serialconsole(dhd_bus_t *bus, bool get, bool enable, int *bcmerror);
 #endif /* DHD_DEBUG */
 
@@ -506,30 +506,6 @@ static int dhdsdio_download_code_array(dhd_bus_t *bus);
 #include <htsf.h>
 extern uint32 dhd_get_htsf(void *dhd, int ifidx);
 #endif /* WLMEDIA_HTSF */
-
-struct dhd_bus *dhd_pub_global = NULL;  /* GREG */
-
-void *
-dhd_get_dhd_pub ( void )
-{
-	dhd_bus_t *bus = dhd_pub_global;
-
-	if (bus)
-		return bus->dhd;
-	else
-		return NULL;
-}
-
-void *
-dhd_get_dhd_bus_sdh ( void )
-{
-	dhd_bus_t *bus = dhd_pub_global;
-
-	if (bus)
-		return bus->sdh;
-	else
-		return NULL;
-}
 
 static void
 dhd_dongle_setmemsize(struct dhd_bus *bus, int mem_size)
@@ -835,7 +811,7 @@ dhdsdio_clkctl(dhd_bus_t *bus, uint target, bool pendok)
 	return ret;
 }
 
-int
+static int
 dhdsdio_bussleep(dhd_bus_t *bus, bool sleep)
 {
 	bcmsdh_info_t *sdh = bus->sdh;
@@ -1961,7 +1937,7 @@ break2:
 }
 
 static int
-dhdsdio_checkdied(dhd_bus_t *bus, uint8 *data, uint size)
+dhdsdio_checkdied(dhd_bus_t *bus, char *data, uint size)
 {
 	int bcmerror = 0;
 	uint msize = 512;
@@ -5403,7 +5379,6 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 	if (dhd_download_fw_on_driverload)
 		dhd_wl_ioctl_cmd(bus->dhd, WLC_UP, (char *)&up, sizeof(up), TRUE, 0);
 #endif
-	dhd_pub_global = (dhd_bus_t *)bus;
 	return bus;
 
 fail:
@@ -5816,8 +5791,6 @@ static void
 dhdsdio_disconnect(void *ptr)
 {
 	dhd_bus_t *bus = (dhd_bus_t *)ptr;
-
-	dhd_pub_global = NULL;
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
