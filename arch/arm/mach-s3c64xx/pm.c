@@ -79,6 +79,7 @@ static struct sleep_save misc_save[] = {
 	SAVE_ITEM(S3C64XX_AHB_CON2),
 	
 	SAVE_ITEM(S3C64XX_SPCON),
+	SAVE_ITEM(S3C64XX_SPCONSLP),
 
 	SAVE_ITEM(S3C64XX_MEM0CONSTOP),
 	SAVE_ITEM(S3C64XX_MEM1CONSTOP),
@@ -88,6 +89,7 @@ static struct sleep_save misc_save[] = {
 
 	SAVE_ITEM(S3C64XX_SDMA_SEL),
 	SAVE_ITEM(S3C64XX_MODEM_MIFPCON),
+	SAVE_ITEM(S3C64XX_SLEEP_CFG),
 };
 
 void s3c_pm_configure_extint(void)
@@ -152,9 +154,15 @@ void s3c_pm_restore_core(void)
 
 void s3c_pm_save_core(void)
 {
+	u32 spcon;
+
 	s3c_pm_do_save(misc_save, ARRAY_SIZE(misc_save));
 	s3c_pm_do_save(core_save, ARRAY_SIZE(core_save));
 	s3c64xx_others_save = __raw_readl(S3C64XX_OTHERS);
+
+	spcon = __raw_readl(S3C64XX_SPCON);
+	spcon &= ~0xffec0000;
+	__raw_writel(spcon, S3C64XX_SPCON);
 }
 
 /* since both s3c6400 and s3c6410 share the same sleep pm calls, we

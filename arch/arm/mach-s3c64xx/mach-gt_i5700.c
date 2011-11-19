@@ -68,7 +68,9 @@
 #include <mach/s3c6410.h>
 #include <mach/pd.h>
 #include <mach/regs-gpio.h>
+#include <mach/regs-gpio-memport.h>
 #include <mach/regs-sys.h>
+#include <mach/regs-syscon-power.h>
 #include <mach/regs-clock.h>
 
 #include <asm/irq.h>
@@ -386,7 +388,6 @@ static struct regulator_init_data spica_ldo4_data = {
 		.min_uV			= 3300000,
 		.max_uV			= 3300000,
 		.apply_uV		= 0,
-		.always_on		= 1,
 		.valid_ops_mask 	= REGULATOR_CHANGE_STATUS,
 		.valid_modes_mask	= REGULATOR_MODE_NORMAL,
 		.state_mem		= {
@@ -839,16 +840,6 @@ static struct platform_device spica_s6d05a = {
  * SDHCI platform data
  */
 
-static void spica_sdhci0_cfg_card(struct platform_device *dev,
-				  void __iomem *r,
-				  struct mmc_ios *ios,
-				  struct mmc_card *card)
-{
-	writel(S3C64XX_SDHCI_CONTROL4_DRIVE_4mA, r + S3C64XX_SDHCI_CONTROL4);
-
-	s3c6400_setup_sdhci_cfg_card(dev, r, ios, card);
-}
-
 static struct s3c_sdhci_platdata spica_hsmmc0_pdata = {
 	.max_width		= 4,
 	.host_caps		= MMC_CAP_4_BIT_DATA
@@ -856,7 +847,7 @@ static struct s3c_sdhci_platdata spica_hsmmc0_pdata = {
 	.cd_type		= S3C_SDHCI_CD_GPIO,
 	.ext_cd_gpio		= GPIO_TF_DETECT,
 	.ext_cd_gpio_invert	= 1,
-	.cfg_card		= spica_sdhci0_cfg_card,
+	.cfg_card		= s3c6400_setup_sdhci_cfg_card,
 };
 
 static int spica_wlan_cd_state = 0;
@@ -881,24 +872,6 @@ static int spica_wlan_cd_cleanup(void (*notify_func)(struct platform_device *,
 	return 0;
 }
 
-static void spica_sdhci2_cfg_card(struct platform_device *dev,
-				  void __iomem *r,
-				  struct mmc_ios *ios,
-				  struct mmc_card *card)
-{
-	unsigned long flags;
-	u32 reg;
-
-	local_irq_save(flags);
-	reg = __raw_readl(S3C64XX_SPCON);
-	reg &= ~S3C64XX_SPCON_DRVCON_HSMMC_MASK;
-	reg |= S3C64XX_SPCON_DRVCON_HSMMC_2mA;
-	__raw_writel(reg, S3C64XX_SPCON);
-	local_irq_restore(flags);
-
-	s3c6400_setup_sdhci_cfg_card(dev, r, ios, card);
-}
-
 static struct s3c_sdhci_platdata spica_hsmmc2_pdata = {
 	.max_width		= 4,
 	.host_caps		= MMC_CAP_4_BIT_DATA
@@ -907,7 +880,7 @@ static struct s3c_sdhci_platdata spica_hsmmc2_pdata = {
 	.ext_cd_init		= spica_wlan_cd_init,
 	.ext_cd_cleanup		= spica_wlan_cd_cleanup,
 	.built_in		= 1,
-	.cfg_card		= spica_sdhci2_cfg_card,
+	.cfg_card		= s3c6400_setup_sdhci_cfg_card,
 };
 
 static struct regulator_consumer_supply mmc2_supplies[] = {
@@ -2524,6 +2497,18 @@ static void __init spica_machine_init(void)
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON1);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON2);
 	__raw_writel(0x00008888, S3C64XX_EINT0FLTCON3);
+	__raw_writel(0x00848484, S3C64XX_EINT12FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT34FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT56FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT78FLTCON);
+	__raw_writel(0x00000084, S3C64XX_EINT9FLTCON);
+
+	/* Setup sleep mode settings */
+	__raw_writel(0x1020, S3C64XX_SPCONSLP);
+	__raw_writel(0x00005000, S3C64XX_MEM0CONSLP0);
+	__raw_writel(0x01041595, S3C64XX_MEM0CONSLP1);
+	__raw_writel(0x10055000, S3C64XX_MEM1CONSLP);
+	__raw_writel(__raw_readl(S3C64XX_SLEEP_CFG) & ~0x61, S3C64XX_SLEEP_CFG);
 
 	/* Configure GPIO pins */
 	s3c_pin_config(spica_pin_config, ARRAY_SIZE(spica_pin_config));
