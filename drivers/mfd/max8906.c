@@ -64,7 +64,7 @@ static struct i2c_client *max8906_apm_i2c_client = NULL;
  * new I2C Interface
  */
 
-static int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *dest)
+int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *dest)
 {
 	struct i2c_client *client = max8906->i2c_client;
 	int ret;
@@ -84,7 +84,7 @@ static int max8906_i2c_device_read(struct max8906_data *max8906, u8 reg, u8 *des
 }
 EXPORT_SYMBOL(max8906_i2c_device_read);
 
-static int max8906_i2c_device_update(struct max8906_data *max8906, u8 reg,
+	int max8906_i2c_device_update(struct max8906_data *max8906, u8 reg,
 				     u8 val, u8 mask)
 {
 	struct i2c_client *client = max8906->i2c_client;
