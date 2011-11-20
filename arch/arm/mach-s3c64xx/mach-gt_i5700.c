@@ -47,7 +47,7 @@
 #include <linux/input/qt5480_ts.h>
 #include <linux/wlan_plat.h>
 #include <linux/akm8973.h>
-#include <linux/i2c/bma023.h>
+#include <linux/bma150.h>
 #include <linux/spica_bt.h>
 #include <linux/sec_jack.h>
 #include <linux/vibetonz.h>
@@ -313,7 +313,6 @@ static struct i2c_board_info spica_misc_i2c_devs[] __initdata = {
 	}, {
 		.type		= "bma023",
 		.addr		= 0x38,
-		.irq		= IRQ_BMA023,
 	}, {
 		.type		= "akm8973",
 		.addr		= 0x1c,
@@ -1431,7 +1430,6 @@ static struct s3c_pin_cfg_entry spica_wlan_pin_config_on[] = {
 	S3C64XX_GPH7_MMC2_DATA1, S3C_PIN_PULL(NONE),
 	S3C64XX_GPH8_MMC2_DATA2, S3C_PIN_PULL(NONE),
 	S3C64XX_GPH9_MMC2_DATA3, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(NONE),
 };
 
 static struct s3c_pin_cfg_entry spica_wlan_pin_config_off[] = {
@@ -1441,7 +1439,6 @@ static struct s3c_pin_cfg_entry spica_wlan_pin_config_off[] = {
 	S3C64XX_PIN(GPH(7)), S3C_PIN_IN, S3C_PIN_PULL(NONE), /* DATA1 */
 	S3C64XX_PIN(GPH(8)), S3C_PIN_IN, S3C_PIN_PULL(NONE), /* DATA2 */
 	S3C64XX_PIN(GPH(9)), S3C_PIN_IN, S3C_PIN_PULL(NONE), /* DATA3 */
-	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(DOWN),
 };
 
 static int spica_wlan_set_power(int val)
@@ -1456,11 +1453,7 @@ static int spica_wlan_set_power(int val)
 		spica_wifi_bt_power_inc();
 		msleep(150);
 		gpio_set_value(GPIO_WLAN_RST_N, 1);
-		s3c_pin_config(spica_wlan_pin_config_on,
-					ARRAY_SIZE(spica_wlan_pin_config_on));
 	} else {
-		s3c_pin_config(spica_wlan_pin_config_off,
-					ARRAY_SIZE(spica_wlan_pin_config_off));
 		gpio_set_value(GPIO_WLAN_RST_N, 0);
 		spica_wifi_bt_power_dec();
 	}
@@ -1480,10 +1473,24 @@ static int spica_wlan_set_reset(int val)
 static int spica_wlan_set_carddetect(int val)
 {
 	printk("%s = %d\n", __func__, val);
+
+	if (spica_wlan_cd_state == val)
+		return 0;
+
 	spica_wlan_cd_state = val;
+
+	if (val)
+		s3c_pin_config(spica_wlan_pin_config_on,
+					ARRAY_SIZE(spica_wlan_pin_config_on));
+	else
+		s3c_pin_config(spica_wlan_pin_config_off,
+					ARRAY_SIZE(spica_wlan_pin_config_off));
+
+	udelay(10);
+
 	if (spica_wlan_notify_func)
 		spica_wlan_notify_func(&s3c_device_hsmmc2, val);
-	msleep(100);
+
 	return 0;
 }
 
@@ -2243,7 +2250,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_BT_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C_PIN(GPIO_TA_CHG_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ONEDRAM_INT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(UP),
 	S3C_PIN(GPIO_MSENSE_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ACC_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_SIM_DETECT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
