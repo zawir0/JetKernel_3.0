@@ -59,7 +59,6 @@
 #include <linux/input/qt5480_ts.h>
 #include <linux/wlan_plat.h>
 #include <linux/akm8973.h>
-#include <linux/i2c/bma023.h>
 #include <linux/spica_bt.h>
 #include <linux/sec_jack.h>
 #include <linux/vibetonz.h>
@@ -145,9 +144,9 @@
 #define GPIO_PS_VOUT_30		S3C64XX_GPL(12) //J
 #define GPIO_BOOT_MODE		S3C64XX_GPL(13) //J//SPICA name: BOOT
 #define GPIO_LCD_ID		S3C64XX_GPQ(5)	//J
-#define GPIO_REV1		S3C64CC_GPO(14)	//J
-#define GPIO_REV2		S3C64CC_GPO(15)	//J
-#define GPIO_REV3		S3C64CC_GPO(8)	//J
+#define GPIO_REV1		S3C64XX_GPO(14)	//J
+#define GPIO_REV2		S3C64XX_GPO(15)	//J
+#define GPIO_REV3		S3C64XX_GPO(8)	//J
 
 /* I2C (externally pulled up) */
 #define GPIO_USBSW_SCL_3V0	S3C64XX_GPK(6)	//J
@@ -279,10 +278,10 @@ static struct akm8973_platform_data spica_akm8973_pdata = {
 
 static struct i2c_board_info jet_sensor_i2c_devs[] __initdata = {
 	{
-		.type		= "bma023",
-		.addr		= 0x38,
-		.irq		= IRQ_MSENSE,	//IRQ_BMA023,
-	}, {
+//		.type		= "bma023",
+//		.addr		= 0x38,
+//		.irq		= IRQ_MSENSE,	//IRQ_BMA023,
+//	}, {
 		.type		= "akm8973",
 		.addr		= 0x1c,
 //		.irq		= IRQ_AKM8973,
@@ -935,7 +934,7 @@ static struct platform_device spica_s6d05a = {
  * SDHCI platform data
  */
 
-static struct s3c_sdhci_platdata spica_hsmmc0_pdata = {
+static struct s3c_sdhci_platdata jet_hsmmc0_pdata = {
 	.max_width		= 4,
 	.host_caps		= MMC_CAP_4_BIT_DATA |
 				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
@@ -943,6 +942,14 @@ static struct s3c_sdhci_platdata spica_hsmmc0_pdata = {
 	.cd_type		= S3C_SDHCI_CD_GPIO,
 	.ext_cd_gpio		= GPIO_TF_DETECT,
 	.ext_cd_gpio_invert	= 1,
+};
+
+static struct s3c_sdhci_platdata jet_hsmmc1_pdata = {
+	.max_width		= 4,
+	.host_caps		= MMC_CAP_4_BIT_DATA |
+				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
+				MMC_CAP_DISABLE,
+	.cd_type		= S3C_SDHCI_CD_PERMANENT,
 };
 
 static int spica_wlan_cd_state = 0;
@@ -1934,6 +1941,7 @@ static struct s3c_audio_pdata spica_i2s_pdata = {
 static struct platform_device *spica_devices[] __initdata = {
 	&mmc2_fixed_voltage,
 	&s3c_device_hsmmc0,
+	&s3c_device_hsmmc1,
 	&s3c_device_hsmmc2,
 	&s3c_device_rtc,
 	&s3c_device_i2c0,
@@ -2371,23 +2379,19 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 };
 
 static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
-	/* UART 0 (Phone) */
-	S3C64XX_PIN(GPA(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
-	S3C64XX_PIN(GPA(1)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
-
 	/* UART 1 (Bluetooth) */
 	S3C64XX_PIN(GPA(4)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
 	S3C64XX_PIN(GPA(5)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
 	S3C64XX_PIN(GPA(6)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* CTSn */
 	S3C64XX_PIN(GPA(7)), S3C64XX_PIN_SLP(HIGH), S3C_PIN_PULL(NONE), /* RTSn */
 
-	/* UART 2 (External) */
+	/* UART 2 (External / USB SW) */
 	S3C64XX_PIN(GPB(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
 	S3C64XX_PIN(GPB(1)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
 
-	/* I2C 1 */
-	S3C64XX_PIN(GPB(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(UP), /* SCL */
-	S3C64XX_PIN(GPB(3)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(UP), /* SDA */
+	/* UART 3 (Phone) */
+	S3C64XX_PIN(GPB(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
+	S3C64XX_PIN(GPB(3)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
 
 	/* I2C 0 */
 	S3C64XX_PIN(GPB(5)), S3C64XX_PIN_SLP(HIGH), S3C_PIN_PULL(NONE), /* SCL */
@@ -2406,6 +2410,12 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 	S3C64XX_PIN(GPD(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* LRCLK */
 	S3C64XX_PIN(GPD(3)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* DI */
 	S3C64XX_PIN(GPD(4)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* DO */
+
+	/* PCM 1 */
+	S3C64XX_PIN(GPE(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* SCLK */
+	S3C64XX_PIN(GPE(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* FSYNC */
+	S3C64XX_PIN(GPE(3)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* SIN */
+	S3C64XX_PIN(GPE(4)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* SOUT */
 
 	/* CAMIF */
 	S3C64XX_PIN(GPF(0)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* CLK */
@@ -2431,6 +2441,14 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 	S3C64XX_PIN(GPG(3)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA1 */
 	S3C64XX_PIN(GPG(4)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA2 */
 	S3C64XX_PIN(GPG(5)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA3 */
+
+	/* MMC 1 (iNAND) */
+	S3C64XX_PIN(GPH(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(DOWN), /* CLK */
+	S3C64XX_PIN(GPH(1)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* CMD */
+	S3C64XX_PIN(GPH(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA0 */
+	S3C64XX_PIN(GPH(3)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA1 */
+	S3C64XX_PIN(GPH(4)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA2 */
+	S3C64XX_PIN(GPH(5)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* DATA3 */
 
 	/* LCD */
 	S3C64XX_PIN(GPI(0)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* VD0 */
@@ -2614,7 +2632,8 @@ static void __init spica_machine_init(void)
 	s3c_fb_set_platdata(&spica_lcd_pdata);
 
 	/* Setup SDHCI */
-	s3c_sdhci0_set_platdata(&spica_hsmmc0_pdata);
+	s3c_sdhci0_set_platdata(&jet_hsmmc0_pdata);
+	s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
 	s3c_sdhci2_set_platdata(&spica_hsmmc2_pdata);
 
 	/* Setup keypad */
@@ -2655,7 +2674,7 @@ static void __init spica_machine_init(void)
  * Machine definition
  */
 
-MACHINE_START(GT_I5700, "Spica")
+MACHINE_START(GT_I5700, "Jet")
 	/* Maintainer: Tomasz Figa <tomasz.figa at gmail.com> */
 	.boot_params	= S3C64XX_PA_SDRAM + 0x100,
 	.init_irq	= s3c6410_init_irq,

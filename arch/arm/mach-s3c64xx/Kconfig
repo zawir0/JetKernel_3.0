@@ -344,6 +344,7 @@ config MACH_GT_S8000
 	select SAMSUNG_DEV_PWM
 	select SAMSUNG_DEV_ADC
 	select S3C_DEV_HSMMC
+	select S3C_DEV_HSMMC1
 	select S3C_DEV_HSMMC2
 	select S3C_DEV_I2C1
 	select S3C_DEV_FB
