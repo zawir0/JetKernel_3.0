@@ -24,20 +24,19 @@
 #include <linux/mfd/tiny6410_1wire.h>
 
 #define TINY6410_BUS_CLOCK	(9600)
-#define TINY6410_1WIRE_DELAY	((NSEC_PER_SEC / TINY6410_BUS_CLOCK) - 500)
+#define TINY6410_1WIRE_DELAY	((NSEC_PER_SEC / TINY6410_BUS_CLOCK) - 100)
 
 /*
  * Driver data
  */
 
 enum tiny6410_1wire_state {
-	TINY6410_1WIRE_IDLE = 0,
+	TINY6410_1WIRE_STOP = 0,
 	TINY6410_1WIRE_RESET,
 	TINY6410_1WIRE_TX,
 	TINY6410_1WIRE_WAIT1,
 	TINY6410_1WIRE_WAIT2,
 	TINY6410_1WIRE_RX,
-	TINY6410_1WIRE_STOP,
 };
 
 struct tiny6410_1wire {
@@ -50,7 +49,6 @@ struct tiny6410_1wire {
 	u16		tx_data;
 	u32		rx_data;
 	int		error;
-	ktime_t		next_event;
 	int		bits_left;
 
 	struct tiny6410_1wire_platform_data	*pdata;
@@ -106,6 +104,7 @@ int tiny6410_1wire_transfer(struct tiny6410_1wire *bus,
 	u32 rx;
 	u8 crc;
 	int retry = 0;
+	ktime_t time;
 
 	/* Calculate CRC8 checksum */
 	crc = crc8_tab[0xac ^ tx_data];
@@ -123,8 +122,8 @@ restart:
 	bus->state = TINY6410_1WIRE_RESET;
 
 	/* Schedule the timer */
-	bus->next_event = ktime_add_ns(ktime_get(), TINY6410_1WIRE_DELAY);
-	hrtimer_start(&bus->timer, bus->next_event, HRTIMER_MODE_ABS);
+	time = ktime_add_ns(ktime_get(), TINY6410_1WIRE_DELAY);
+	hrtimer_start(&bus->timer, time, HRTIMER_MODE_ABS);
 
 	/* Wait for the transfer to finish */
 	ret = wait_for_completion_interruptible(&bus->completion);
@@ -141,9 +140,14 @@ restart:
 		crc = crc8_tab[0xac ^ ((rx >> 24) & 0xff)];
 		crc = crc8_tab[crc ^ ((rx >> 16) & 0xff)];
 		crc = crc8_tab[crc ^ ((rx >> 8) & 0xff)];
-		if (crc != (rx & 0xff))
+		if (crc != (rx & 0xff)) {
 			ret = -EBADMSG;
+			dev_err(bus->dev, "CRC error in received data\n");
+		}
 	}
+
+	if (ret == -ETIMEDOUT)
+		dev_err(bus->dev, "Transfer timed out\n");
 
 	if (ret && ++retry <= 10)
 		goto restart;
@@ -200,25 +204,22 @@ static enum hrtimer_restart tiny6410_1wire_timer(struct hrtimer *timer)
 	case TINY6410_1WIRE_STOP:
 		/* Stop condition */
 		if (--bus->bits_left == 0) {
-			bus->state = TINY6410_1WIRE_IDLE;
 			complete(&bus->completion);
 			return HRTIMER_NORESTART;
 		}
 		break;
-
-	default:
-		BUG();
 	}
 
-	ret = hrtimer_forward(&bus->timer, bus->next_event,
+	ret = hrtimer_forward(&bus->timer, ktime_get(),
 					ktime_set(0, TINY6410_1WIRE_DELAY));
 	if (ret > 1) {
+		gpio_direction_output(pdata->gpio_pin, 1);
+		bus->state = TINY6410_1WIRE_STOP;
 		bus->error = -ETIMEDOUT;
 		complete(&bus->completion);
 		return HRTIMER_NORESTART;
 	}
 
-	bus->next_event = hrtimer_get_expires(&bus->timer);
 
 	return HRTIMER_RESTART;
 }

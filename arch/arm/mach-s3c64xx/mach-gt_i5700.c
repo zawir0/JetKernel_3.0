@@ -254,10 +254,10 @@ static struct s3c2410_uartcfg spica_uartcfgs[] __initdata = {
  *			BMA023 (accelerometer),
  * 			AK8973B (magnetometer) */
 static struct s3c2410_platform_i2c spica_misc_i2c __initdata = {
-	.flags		= 0,
+	.flags		= S3C_IICFLG_FILTER,
 	.slave_addr	= 0x10,
-	.frequency	= 100*1000,
-	.sda_delay	= 100,
+	.frequency	= 250*1000,
+	.sda_delay	= 50,
 	.bus_num	= 0,
 };
 
@@ -1335,6 +1335,7 @@ static void spica_wifi_bt_power_dec(void)
  */
 
 static struct s3c_pin_cfg_entry spica_bt_pin_config_on[] = {
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(NONE),
 	S3C64XX_GPA4_UART1_RXD, S3C_PIN_PULL(NONE),
 	S3C64XX_GPA5_UART1_TXD, S3C_PIN_PULL(NONE),
 	S3C64XX_GPA6_UART1_CTSN, S3C_PIN_PULL(NONE),
@@ -1342,6 +1343,7 @@ static struct s3c_pin_cfg_entry spica_bt_pin_config_on[] = {
 };
 
 static struct s3c_pin_cfg_entry spica_bt_pin_config_off[] = {
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(DOWN),
 	S3C64XX_PIN(GPA(4)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C64XX_PIN(GPA(5)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C64XX_PIN(GPA(6)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
@@ -2206,7 +2208,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 
 	/* Outputs */
 	S3C_PIN(GPIO_USB_SEL), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_MSENSE_RST), S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_MSENSE_RST), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_TOUCH_EN), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PM_SET1), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PM_SET2), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2250,7 +2252,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_BT_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C_PIN(GPIO_TA_CHG_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ONEDRAM_INT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(UP),
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 	S3C_PIN(GPIO_MSENSE_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ACC_INT), S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_SIM_DETECT_N), S3C_PIN_IN, S3C_PIN_PULL(NONE),
