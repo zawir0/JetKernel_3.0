@@ -1963,6 +1963,7 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_ram_console,
 	&spica_gpio_keys,
 	&s3c_device_adc,
+	&s3c_device_ts,
 	&spica_battery,
 	&samsung_asoc_dma,
 	&s3c64xx_device_iis0,
