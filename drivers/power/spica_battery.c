@@ -41,7 +41,7 @@
 #define SUSPEND_INTERVAL	3600
 
 /* Number of samples for averaging (a power of two!) */
-#define NUM_SAMPLES		8
+#define NUM_SAMPLES		4
 
 /* Number of samples for a single read */
 #define ADC_SAMPLE_COUNT	4
@@ -197,7 +197,6 @@ struct spica_battery {
 	struct alarm		alarm;
 #endif
 	unsigned int irq_pok;
-	unsigned int irq_chg;
 
 	int percent_value;
 	int volt_value;
@@ -214,6 +213,7 @@ struct spica_battery {
 	int calibration;
 	enum spica_battery_supply supply;
 
+	ktime_t			last_sample;
 	unsigned int		interval;
 	struct average_data	volt_avg;
 	struct average_data	temp_avg;
@@ -349,8 +349,13 @@ static void spica_battery_poll(struct work_struct *work)
 		bat->health = POWER_SUPPLY_HEALTH_GOOD;
 
 	bat->volt_value = volt_value;
-	bat->percent_value = percent_value;
+
+	if (bat->percent_value >= percent_value
+	    || bat->status != POWER_SUPPLY_STATUS_DISCHARGING)
+		bat->percent_value = percent_value;
+
 	bat->temp_value = temp_value;
+	bat->last_sample = ktime_get_boottime();
 
 	health = bat->health;
 
@@ -367,6 +372,13 @@ static void spica_battery_poll(struct work_struct *work)
 	if (bat->health != health) {
 		bat->health = health;
 		update = 1;
+	}
+
+	if (bat->chg_enable) {
+		if (gpio_get_value(pdata->gpio_chg) ^ pdata->gpio_chg_inverted)
+			bat->status = POWER_SUPPLY_STATUS_CHARGING;
+		else
+			bat->status = POWER_SUPPLY_STATUS_FULL;
 	}
 
 error:
@@ -390,6 +402,7 @@ static void spica_battery_work(struct work_struct *work)
 	int is_plugged, is_healthy, chg_enable;
 	enum spica_battery_supply type;
 	int i;
+	ktime_t now, diff;
 
 	/* Cancel any pending works */
 	cancel_delayed_work_sync(&bat->poll_work);
@@ -425,6 +438,7 @@ static void spica_battery_work(struct work_struct *work)
 		goto no_change;
 
 	if (chg_enable) {
+		bat->status = POWER_SUPPLY_STATUS_CHARGING;
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock(&bat->chg_wakelock);
 #endif
@@ -451,18 +465,17 @@ static void spica_battery_work(struct work_struct *work)
 	bat->chg_enable = chg_enable;
 
 no_change:
-	if (chg_enable) {
-		if (gpio_get_value(pdata->gpio_chg) ^ pdata->gpio_chg_inverted)
-			bat->status = POWER_SUPPLY_STATUS_CHARGING;
-		else
-			bat->status = POWER_SUPPLY_STATUS_FULL;
-	}
-
 	/* We're no longer accessing shared data */
 	mutex_unlock(&bat->mutex);
 
 	/* Update the values and spin the polling loop */
-	spica_battery_poll(&bat->poll_work.work);
+	now = ktime_get_boottime();
+	diff = ktime_sub(now, bat->last_sample);
+	if (ktime_to_ms(diff) > bat->interval)
+		spica_battery_poll(&bat->poll_work.work);
+	else
+		queue_delayed_work(bat->workqueue, &bat->poll_work,
+					msecs_to_jiffies(bat->interval));
 
 	/* Notify anyone interested */
 	power_supply_changed(&bat->bat);
@@ -1068,6 +1081,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 	bat->percent_value = lookup_value(&bat->percent_lookup, bat->volt_value);
 	bat->volt_value = lookup_value(&bat->volt_lookup, bat->volt_value);
 	bat->temp_value = lookup_value(&bat->temp_lookup, bat->temp_value);
+	bat->last_sample = ktime_get_boottime();
 
 	/* Register the power supplies */
 	for (i = 0; i < SPICA_BATTERY_NUM; ++i) {
@@ -1140,31 +1154,15 @@ static int spica_battery_probe(struct platform_device *pdev)
 		goto err_destroy_workqueue;
 	}
 
-	irq = gpio_to_irq(pdata->gpio_chg);
-	if (irq <= 0) {
-		dev_err(&pdev->dev, "CHG irq invalid.\n");
-		goto err_pok_irq_free;
-	}
-	bat->irq_chg = irq;
-
-	ret = request_irq(irq, spica_charger_irq,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-				dev_name(&pdev->dev), bat);
-	if (ret) {
-		dev_err(&pdev->dev, "Failed to request CHG irq (%d)\n", ret);
-		goto err_pok_irq_free;
-	}
-
 	ret = request_irq(IRQ_BATF, spica_battery_fault_irq,
 						0, dev_name(&pdev->dev), bat);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Failed to request battery fault irq (%d)\n", ret);
-		goto err_chg_irq_free;
+		goto err_pok_irq_free;
 	}
 
 	enable_irq_wake(bat->irq_pok);
-	enable_irq_wake(bat->irq_chg);
 
 	spica_battery_set_fault_enable(1);
 
@@ -1182,8 +1180,6 @@ static int spica_battery_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_chg_irq_free:
-	free_irq(bat->irq_chg, bat);
 err_pok_irq_free:
 	free_irq(bat->irq_pok, bat);
 err_destroy_workqueue:
@@ -1233,10 +1229,8 @@ static int spica_battery_remove(struct platform_device *pdev)
 	int i;
 
 	disable_irq_wake(bat->irq_pok);
-	disable_irq_wake(bat->irq_chg);
 
 	free_irq(IRQ_BATF, bat);
-	free_irq(bat->irq_chg, bat);
 	free_irq(bat->irq_pok, bat);
 
 	if (pdata->supply_detect_cleanup)
@@ -1292,46 +1286,12 @@ static int spica_battery_prepare(struct device *dev)
 static void spica_battery_complete(struct device *dev)
 {
 	struct spica_battery *bat = dev_get_drvdata(dev);
-	int volt_value = -1, temp_value = -1;
-	int i;
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock(&bat->wakelock);
 #endif
 #ifdef CONFIG_RTC_INTF_ALARM
 	alarm_cancel(&bat->alarm);
 #endif
-	/* Get some initial data for averaging */
-	for (i = 0; i < NUM_SAMPLES; ++i) {
-		int sample;
-		/* Get a voltage sample from the ADC */
-		sample = spica_battery_adc_read(bat->client, bat->pdata->volt_channel);
-		if (sample < 0) {
-			dev_warn(dev, "Failed to get ADC sample.\n");
-			continue;
-		}
-		sample += bat->compensation;
-		bat->vol_adc = sample;
-		/* Put the sample and get the new average */
-		volt_value = put_sample_get_avg(&bat->volt_avg, sample);
-		/* Get a temperature sample from the ADC */
-		sample = spica_battery_adc_read(bat->client, bat->pdata->temp_channel);
-		if (sample < 0) {
-			dev_warn(dev, "Failed to get ADC sample.\n");
-			continue;
-		}
-		bat->temp_adc = sample;
-		/* Put the sample and get the new average */
-		temp_value = put_sample_get_avg(&bat->temp_avg, sample);
-	}
-
-	if (volt_value > 0) {
-		bat->percent_value = lookup_value(&bat->percent_lookup, volt_value);
-		bat->volt_value = lookup_value(&bat->volt_lookup, volt_value);
-	}
-
-	if (temp_value > 0)
-		bat->temp_value = lookup_value(&bat->temp_lookup, temp_value);
-
 	/* Schedule timer to check current status */
 	queue_work(bat->workqueue, &bat->work);
 }
