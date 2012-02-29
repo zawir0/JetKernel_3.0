@@ -489,6 +489,12 @@ config VIDEO_TCM825X
 	  This is a driver for the Toshiba TCM825x VGA camera sensor.
 	  It is used for example in Nokia N800.
 
+config VIDEO_S5K4CA
+	tristate "s5k4ca support"
+	depends on I2C && VIDEO_V4L2
+	help
+	  This driver supports S5K4CA cameras from Samsung
+
 comment "Video improvement chips"
 
 config VIDEO_UPD64031A
@@ -960,6 +966,18 @@ config VIDEO_S5P_MIPI_CSIS
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called s5p-csis.
+
+config VIDEO_SAMSUNG_S3C_FIMC
+	tristate "Samsung S3C camera host interface driver"
+	depends on VIDEO_V4L2 && PLAT_S3C64XX && PM_RUNTIME
+	select VIDEOBUF2_DMA_CONTIG
+	select V4L2_MEM2MEM_DEV
+	---help---
+	  This is a v4l2 driver for Samsung S3C camera host interface
+          and video postprocessor.
+
+	  To compile this driver as a module, choose M here; the
+	  module will be called s3c-fimc.
 
 #
 # USB Multimedia device configuration
