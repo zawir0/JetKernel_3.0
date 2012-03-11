@@ -57,6 +57,14 @@
 
 #define FEAT_PEN_IRQ	(1 << 0)	/* HAS ADCCLRINTPNDNUP */
 
+#define S3C_ADCDAT0_XPDATA_MASK_12BIT	(0x0FFF)
+
+// Calibration Data
+	int xmin = 1150;//1090;
+	int xmax = 2750;//2854;
+	int ymin = 1050;
+	int ymax = 3050;
+
 /* Per-touchscreen data. */
 
 /**
@@ -121,6 +129,9 @@ static void touch_timer_fire(unsigned long data)
 
 			dev_dbg(ts.dev, "%s: X=%lu, Y=%lu, count=%d\n",
 				__func__, ts.xp, ts.yp, ts.count);
+
+//			printk("%s: X=%lu, Y=%lu, count=%d\n",
+//				__func__, ts.xp, ts.yp, ts.count);
 
 			input_report_abs(ts.input, ABS_X, ts.xp);
 			input_report_abs(ts.input, ABS_Y, ts.yp);
@@ -198,7 +209,8 @@ static void s3c24xx_ts_conversion(struct s3c_adc_client *client,
 {
 	dev_dbg(ts.dev, "%s: %d,%d\n", __func__, data0, data1);
 
-	ts.xp += data0;
+	ts.xp += S3C_ADCDAT0_XPDATA_MASK_12BIT - (data0 & S3C_ADCDAT0_XPDATA_MASK_12BIT);
+//	ts.xp += data0;
 	ts.yp += data1;
 
 	ts.count++;
@@ -316,8 +328,11 @@ static int __devinit s3c2410ts_probe(struct platform_device *pdev)
 	ts.input = input_dev;
 	ts.input->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
 	ts.input->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
-	input_set_abs_params(ts.input, ABS_X, 0, 0x3FF, 0, 0);
-	input_set_abs_params(ts.input, ABS_Y, 0, 0x3FF, 0, 0);
+	input_set_abs_params(ts.input, ABS_X, xmin, xmax, 0, 0);
+	input_set_abs_params(ts.input, ABS_Y, ymin, ymax, 0, 0);
+
+//	input_set_abs_params(ts.input, ABS_X, 0, 0xFFF, 0, 0);
+//	input_set_abs_params(ts.input, ABS_Y, 0, 0xFFF, 0, 0);
 
 	ts.input->name = "S3C24XX TouchScreen";
 	ts.input->id.bustype = BUS_HOST;

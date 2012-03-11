@@ -54,3 +54,5 @@ obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
 obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
 obj-$(CONFIG_SENSORS_AK8973)	+= akm8973.o
+obj-$(CONFIG_PMIC_MAX8906)	+= max8906.o
+obj-$(CONFIG_ACCEL_KXSD9)	+= kionix-kxsd9.o

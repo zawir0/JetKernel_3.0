@@ -313,7 +313,7 @@ static struct i2c_gpio_platform_data jet_usbsw_i2c_pdata = {
 
 static struct platform_device jet_usbsw_i2c = {
 	.name			= "i2c-gpio",
-	.id			= 2,
+	.id			= 4,
 	.dev.platform_data	= &jet_usbsw_i2c_pdata,
 };
 
@@ -377,7 +377,7 @@ static struct i2c_gpio_platform_data jet_fm_i2c_pdata = {
 
 static struct platform_device jet_fm_i2c = {
 	.name			= "i2c-gpio",
-	.id			= 3,
+	.id			= 2,
 	.dev.platform_data	= &jet_fm_i2c_pdata,
 };
 
@@ -410,7 +410,7 @@ static struct i2c_gpio_platform_data jet_pmic_i2c_pdata = {
 
 static struct platform_device jet_pmic_i2c = {
 	.name			= "i2c-gpio",
-	.id			= 4,
+	.id			= 3,
 	.dev.platform_data	= &jet_pmic_i2c_pdata,
 };
 
@@ -689,11 +689,26 @@ static struct max8906_platform_data jet_max8906_pdata = {
 
 
 static struct i2c_board_info jet_pmic_i2c_devs[] __initdata = {
-	{
-		.type		= "max8906",
-		.addr		= 0x78,			// FIXME: max8906 regulators only use adr 0x78 ???
-		.platform_data	= &jet_max8906_pdata,
-	},
+		{
+			.type		= "max8906",
+			.addr		= 0xD0,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.platform_data	= &jet_max8906_pdata,
+		},
+		{
+			.type		= "max8906",
+			.addr		= 0x8E,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.platform_data	= &jet_max8906_pdata,
+		},
+		{
+			.type		= "max8906",
+			.addr		= 0x78,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.platform_data	= &jet_max8906_pdata,
+		},
+		{
+			.type		= "max8906",
+			.addr		= 0x68,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.platform_data	= &jet_max8906_pdata,
+		},
 };
 
 
@@ -708,7 +723,7 @@ static struct i2c_gpio_platform_data jet_audio_i2c_pdata = {
 
 static struct platform_device jet_audio_i2c = {
 	.name			= "i2c-gpio",
-	.id			= 4,
+	.id			= 5,
 	.dev.platform_data	= &jet_audio_i2c_pdata,
 };
 
@@ -730,6 +745,10 @@ static struct i2c_board_info jet_audio_i2c_devs[] __initdata = {
 
 
 
+struct platform_device sec_device_rtc = {
+	.name   = "rtc-samsungjet",
+	.id		= -1,
+};
 
 
 
@@ -739,6 +758,7 @@ static struct i2c_board_info jet_audio_i2c_devs[] __initdata = {
  * Reserved memory (FIXME: Throw this shit away!)
  */
 
+#if 0
 #define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
 
 #define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
@@ -914,6 +934,85 @@ static void __init spica_add_mem_devices(void)
 static inline void spica_add_mem_devices(void) {}
 #endif
 
+#else
+
+
+#define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
+
+#define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
+#define RESERVED_PMEM_END_ADDR 		(DRAM_END_ADDR)
+
+#define RAM_CONSOLE_SIZE		(SZ_2M)
+#define RESERVED_PMEM_GPU1		(SZ_16M + SZ_8M + SZ_4M + SZ_2M)
+#define RESERVED_PMEM			(SZ_16M)
+
+#define RAM_CONSOLE_START		(RESERVED_PMEM_END_ADDR \
+					- RAM_CONSOLE_SIZE)
+#define GPU1_RESERVED_PMEM_START	(RAM_CONSOLE_START \
+					- RESERVED_PMEM_GPU1)
+#define RESERVED_PMEM_START		(GPU1_RESERVED_PMEM_START \
+					- RESERVED_PMEM)
+#define PHYS_UNRESERVED_SIZE		(RESERVED_PMEM_START - PHYS_OFFSET)
+
+/*
+ * Android PMEM
+ */
+
+#ifdef CONFIG_ANDROID_PMEM
+static struct android_pmem_platform_data pmem_pdata = {
+	.name		= "pmem",
+	.no_allocator	= 1,
+	.cached		= 1,
+	.buffered	= 1,
+	.start		= RESERVED_PMEM_START,
+	.size		= RESERVED_PMEM,
+};
+
+static struct android_pmem_platform_data pmem_gpu1_pdata = {
+	.name		= "pmem_gpu1",
+	.no_allocator	= 0,
+	.cached		= 1,
+	.buffered	= 1,
+	.start		= GPU1_RESERVED_PMEM_START,
+	.size		= RESERVED_PMEM_GPU1,
+};
+
+static struct platform_device pmem_device = {
+	.name		= "android_pmem",
+	.id		= 0,
+	.dev		= { .platform_data = &pmem_pdata },
+};
+
+static struct platform_device pmem_gpu1_device = {
+	.name		= "android_pmem",
+	.id		= 1,
+	.dev		= { .platform_data = &pmem_gpu1_pdata },
+};
+
+static struct platform_device *pmem_devices[] = {
+	&pmem_device,
+	&pmem_gpu1_device,
+};
+
+static void __init spica_add_mem_devices(void)
+{
+	unsigned i;
+	for (i = 0; i < ARRAY_SIZE(pmem_devices); ++i)
+		if (pmem_devices[i]->dev.platform_data) {
+			struct android_pmem_platform_data *pmem =
+					pmem_devices[i]->dev.platform_data;
+
+			if (pmem->size)
+				platform_device_register(pmem_devices[i]);
+		}
+}
+#else
+static inline void spica_add_mem_devices(void) {}
+#endif
+
+#endif
+
+
 /*
  * LCD screen
  */
@@ -933,6 +1032,27 @@ static struct platform_device spica_s6d05a = {
 	},
 };
 
+struct platform_device sec_device_backlight = {
+	.name   = "ams320fs01-backlight",
+	.id     = -1,
+};
+/*
+static struct ams310fn07_platform_data jet_ams310fn07_pdata = {
+	.reset_gpio	= GPIO_LCD_RST_N,
+	.cs_gpio	= GPIO_LCD_CS_N,
+	.sck_gpio	= GPIO_LCD_SCLK,
+	.sda_gpio	= GPIO_LCD_SDI,
+};
+
+static struct platform_device jet_ams310fn07 = {
+	.name		= "ams310fn07-lcd",
+	.id		= -1,
+	.dev		= {
+		.platform_data	= &jet_ams310fn07_pdata,
+		.parent		= &s3c_device_fb.dev
+	},
+};
+*/
 /*
  * SDHCI platform data
  */
@@ -1117,6 +1237,26 @@ static struct samsung_keypad_platdata spica_keypad_pdata __initdata = {
 	.no_autorepeat	= 1,
 };
 
+static uint32_t jet_keymap[] __initdata = {
+	/* KEY(row, col, keycode) */
+	KEY(0, 0, 1), KEY(0, 1, 249), KEY(0, 2, 9),
+	KEY(1, 0, 17), KEY(1, 1, 10), KEY(1, 2,2),
+	KEY(2, 0, 3), KEY(2, 1, 11), KEY(2, 2, 19),
+//	KEY(3, 0, 204), KEY(3, 1, 212) /* Reserved  */,
+};
+
+static struct matrix_keymap_data jet_keymap_data __initdata = {
+	.keymap		= jet_keymap,
+	.keymap_size	= ARRAY_SIZE(jet_keymap),
+};
+
+static struct samsung_keypad_platdata jet_keypad_pdata __initdata = {
+	.keymap_data	= &jet_keymap_data,
+	.rows		= 3,
+	.cols		= 3,
+	.no_autorepeat	= 1,
+};
+
 /*
  * GPIO keys (FIXME: Assign standard key codes)
  */
@@ -1154,6 +1294,32 @@ static struct platform_device spica_gpio_keys = {
 	.num_resources	= 0,
 	.dev		= {
 		.platform_data	= &spica_gpio_keys_pdata,
+	}
+};
+
+static struct gpio_keys_button jet_gpio_keys_data[] = {
+	{
+		.gpio			= GPIO_POWER_N,
+		.code			= 249,
+		.desc			= "Power",
+		.active_low		= 1,
+		.debounce_interval	= 5,
+		.type                   = EV_KEY,
+		.wakeup			= 1,
+	},
+};
+
+static struct gpio_keys_platform_data jet_gpio_keys_pdata  = {
+	.buttons	= jet_gpio_keys_data,
+	.nbuttons	= ARRAY_SIZE(jet_gpio_keys_data),
+};
+
+static struct platform_device jet_gpio_keys = {
+	.name		= "gpio-keys",
+	.id		= 0,
+	.num_resources	= 0,
+	.dev		= {
+		.platform_data	= &jet_gpio_keys_pdata,
 	}
 };
 
@@ -1687,7 +1853,7 @@ static struct android_usb_product usb_products[] = {
 #endif
 };
 
-static char device_serial[] = "0123456789ABCDEF";
+static char device_serial[] = "GTS80000123456789";
 /* standard android USB platform data */
 
 /* Information should be changed as real product for commercial release */
@@ -1937,6 +2103,17 @@ static struct s3c_audio_pdata spica_i2s_pdata = {
 	},
 };
 
+struct platform_device sec_device_battery = {
+	.name   = "jet-battery",
+	.id		= -1,
+};
+
+static struct s3c2410_ts_mach_info s3c_ts_platform __initdata = {
+	.delay			= 30000,
+	.presc			= 49,
+	.oversampling_shift	= 3,
+};
+
 /*
  * Platform devices
  */
@@ -1946,7 +2123,8 @@ static struct platform_device *spica_devices[] __initdata = {
 	&s3c_device_hsmmc0,
 	&s3c_device_hsmmc1,
 	&s3c_device_hsmmc2,
-	&s3c_device_rtc,
+	//&s3c_device_rtc,
+	&sec_device_rtc,
 	&s3c_device_i2c0,
 	&s3c_device_fb,
 	&jet_pmic_i2c,
@@ -1957,13 +2135,18 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_android_usb,
 	&s3c_device_onenand,
 	&samsung_device_keypad,
+	//&s3c_device_keypad_jet,
 	&jet_fm_i2c,
 	&jet_audio_i2c,
-	&spica_s6d05a,
+	//&spica_s6d05a,
+	&sec_device_backlight,
 	&spica_ram_console,
-	&spica_gpio_keys,
+	//&spica_gpio_keys,
+	&jet_gpio_keys,
 	&s3c_device_adc,
-	&spica_battery,
+	&s3c_device_ts,
+	//&spica_battery,
+	&sec_device_battery,
 	&samsung_asoc_dma,
 	&s3c64xx_device_iis0,
 	&s3c_device_timer[1],
@@ -1971,7 +2154,7 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_bt_device,
 	&spica_dpram_device,
 	&spica_vibetonz_device,
-	&spica_jack_device,
+	//&spica_jack_device,
 	&spica_audio_device,
 	&spica_bml_device,
 };
@@ -2219,7 +2402,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPF15_PWM_TOUT1, S3C_PIN_PULL(NONE),
 
 	/* MMC 0 (TF) */
-	S3C64XX_GPG0_MMC0_CLK, S3C_PIN_PULL(NONE),
+	S3C64XX_GPG0_MMC0_CLK, S3C_PIN_PULL(DOWN),
 	S3C64XX_GPG1_MMC0_CMD, S3C_PIN_PULL(NONE),
 	S3C64XX_GPG2_MMC0_DATA0, S3C_PIN_PULL(NONE),
 	S3C64XX_GPG3_MMC0_DATA1, S3C_PIN_PULL(NONE),
@@ -2233,7 +2416,6 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPH3_MMC1_DATA1, S3C_PIN_PULL(NONE),
 	S3C64XX_GPH4_MMC1_DATA2, S3C_PIN_PULL(NONE),
 	S3C64XX_GPH5_MMC1_DATA3, S3C_PIN_PULL(NONE),
-
 	/* LCD */
 	S3C64XX_GPI0_LCD_VD0, S3C_PIN_PULL(NONE),
 	S3C64XX_GPI1_LCD_VD1, S3C_PIN_PULL(NONE),
@@ -2263,15 +2445,13 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPJ9_LCD_VSYNC, S3C_PIN_PULL(NONE),
 	S3C64XX_GPJ10_LCD_VDEN, S3C_PIN_PULL(NONE),
 	S3C64XX_GPJ11_LCD_VCLK, S3C_PIN_PULL(NONE),
-
 	/* Keypad */
-	S3C64XX_GPK8_KEYPAD_ROW0, S3C_PIN_PULL(UP),
-	S3C64XX_GPK9_KEYPAD_ROW1, S3C_PIN_PULL(UP),
-	S3C64XX_GPK10_KEYPAD_ROW2, S3C_PIN_PULL(UP),
+	S3C64XX_GPK8_KEYPAD_ROW0, S3C_PIN_PULL(NONE), //KB
+	S3C64XX_GPK9_KEYPAD_ROW1, S3C_PIN_PULL(NONE), //KB
+	S3C64XX_GPK10_KEYPAD_ROW2, S3C_PIN_PULL(NONE), //KB
 	S3C64XX_GPL0_KEYPAD_COL0, S3C_PIN_PULL(NONE),
 	S3C64XX_GPL1_KEYPAD_COL1, S3C_PIN_PULL(NONE),
 	S3C64XX_GPL2_KEYPAD_COL2, S3C_PIN_PULL(NONE),
-
 	/* OneNAND */
 	S3C64XX_GPO0_MEM0_NCS2, S3C_PIN_PULL(NONE),
 
@@ -2282,14 +2462,14 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_REV1), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_REV2), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_REV3), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
-
 	/* Outputs */
 	S3C_PIN(GPIO_BT_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BT_WLAN_REG_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_WLAN_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_WLAN_WAKE), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MCAM_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_TFLASH_EN), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_TFLASH_EN), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	//S3C_PIN(GPIO_TFLASH_EN(1)), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CAM_EN), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EARPATH_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_CP_CODEC_SW), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2303,7 +2483,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_VIB_EN), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_USB_SEL), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_TV_EN), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_TOUCH_EN), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_TOUCH_EN), 	S3C_PIN_OUT(1), S3C_PIN_PULL(UP),
 	S3C_PIN(GPIO_EXTWKUP), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BT_WAKE), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_ALPS_ON), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2313,14 +2493,13 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_PHONE_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CP_BOOT_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PCM_SEL), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_LCD_CS_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_LCD_SDI), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_LCD_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_LCD_SCLK), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_PDA_PS_HOLD), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_UART_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_LCD_CS_N), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_LCD_SDI), 		S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_LCD_RST_N), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_LCD_SCLK), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	//S3C_PIN(GPIO_PDA_PS_HOLD), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	//S3C_PIN(GPIO_UART_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_VT_CP_SW), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-
 	/* Bit banged I2C */
 	S3C_PIN(GPIO_USBSW_SCL_3V0), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_USBSW_SDA_3V0), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
@@ -2343,17 +2522,16 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_ACC_INT), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
 //	S3C_PIN(GPIO_SIM_DETECT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_POWER_N), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_TF_DETECT), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_TF_DETECT), 	S3C_PIN_CFG(3), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PHONE_ACTIVE), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PMIC_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_JACK_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_DET_35), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_DET_35), 		S3C_PIN_CFG(3), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_SEND_END), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_RESOUT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_BOOT_EINT13), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_BOOT_EINT14), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_BOOT_EINT15), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-
+	S3C_PIN(GPIO_BOOT_EINT13), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_BOOT_EINT14), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_BOOT_EINT15), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
 	/* Unused pins */
 	S3C_PIN(S3C64XX_GPA(0)), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(S3C64XX_GPA(1)), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2387,8 +2565,8 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 	S3C64XX_PIN(GPA(7)), S3C64XX_PIN_SLP(HIGH), S3C_PIN_PULL(NONE), /* RTSn */
 
 	/* UART 2 (External / USB SW) */
-	S3C64XX_PIN(GPB(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
-	S3C64XX_PIN(GPB(1)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
+	//S3C64XX_PIN(GPB(0)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
+	//S3C64XX_PIN(GPB(1)), S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE), /* TXD */
 
 	/* UART 3 (Phone) */
 	S3C64XX_PIN(GPB(2)), S3C64XX_PIN_SLP(IN), S3C_PIN_PULL(NONE), /* RXD */
@@ -2532,7 +2710,7 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 	S3C_PIN(GPIO_LCD_RST_N), 	S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE),	//C orginal mach-jet.c has GPIO_LEVEL_NONE, S3C_GPIO_PULL_NONE
 	S3C_PIN(GPIO_LCD_SCLK), 	S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE),	//C orginal mach-jet.c has GPIO_LEVEL_NONE, S3C_GPIO_PULL_NONE
 	S3C_PIN(GPIO_PDA_PS_HOLD), 	S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_UART_SEL), 	S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE),
+	//S3C_PIN(GPIO_UART_SEL), 	S3C64XX_PIN_SLP(LOW), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_VT_CP_SW), 	S3C64XX_PIN_SLP(RETAIN), S3C_PIN_PULL(NONE),
 
 	/* Bit banged I2C */
@@ -2590,7 +2768,7 @@ static void __init spica_map_io(void)
 {
 	s3c64xx_init_io(spica_iodesc, ARRAY_SIZE(spica_iodesc));
 	s3c24xx_init_clocks(12000000);
-	s3c24xx_init_uarts(spica_uartcfgs, ARRAY_SIZE(spica_uartcfgs));
+	s3c24xx_init_uarts(spica_uartcfgs, ARRAY_SIZE(spica_uartcfgs)-1);
 }
 
 static void spica_poweroff(void)
@@ -2605,6 +2783,7 @@ static void __init spica_machine_init(void)
 	struct clk *uclk1;
 	struct clk *dout_mpll;
 
+	printk("KB: %s Entering\n",__FUNCTION__);
 	/* Setup DOUT MPLL frequency */
 	dout_mpll = clk_get(NULL, "dout_mpll");
 	clk_set_rate(dout_mpll, 133000000);
@@ -2618,16 +2797,24 @@ static void __init spica_machine_init(void)
 	clk_put(uclk1);
 	clk_put(dout_mpll);
 
+	printk("KB: %s Setting clocks\n",__FUNCTION__);
+
 	/* Setup interrupt filtering */
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON0);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON1);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON2);
 	__raw_writel(0x00008888, S3C64XX_EINT0FLTCON3);
 
+	printk("KB: %s Setting GPIOs\n",__FUNCTION__);
+
 	/* Configure GPIO pins */
 	s3c_pin_config(spica_pin_config, ARRAY_SIZE(spica_pin_config));
+
+	printk("KB: %s Setting sleep GPIOs\n",__FUNCTION__);
+
 	s3c_pin_slp_config(spica_slp_config, ARRAY_SIZE(spica_slp_config));
 
+	printk("KB: %s Setting BT_WLAN GPIOs\n",__FUNCTION__);
 	/* Setup Bluetooth and WLAN */
 	spica_bt_lpm_init();
 	gpio_request(GPIO_BT_WLAN_REG_ON, "WLAN/BT power");
@@ -2635,10 +2822,16 @@ static void __init spica_machine_init(void)
 	gpio_request(GPIO_BT_RST_N, "BT reset");
 //	gpio_request(GPIO_MICBIAS_EN, "MIC bias");
 
+	printk("KB: %s Setting PMIC GPIOs\n",__FUNCTION__);
 	/* Setup power management */
 	gpio_request(GPIO_PDA_PS_HOLD, "Power hold");
 	pm_power_off = spica_poweroff;
+
+	printk("KB: %s Setting PMIC\n",__FUNCTION__);
+
 	s3c_pm_init();
+
+	printk("KB: %s Setting I2C\n",__FUNCTION__);
 
 	/* Register I2C devices */
 	s3c_i2c0_set_platdata(&jet_sensor_i2c);
@@ -2653,16 +2846,23 @@ static void __init spica_machine_init(void)
 	i2c_register_board_info(jet_audio_i2c.id, jet_audio_i2c_devs,
 					ARRAY_SIZE(jet_audio_i2c_devs));
 
+	printk("KB: %s Setting FB\n",__FUNCTION__);
 	/* Setup framebuffer */
-	s3c_fb_set_platdata(&spica_lcd_pdata);
+	//s3c_fb_set_platdata(&spica_lcd_pdata);
 
+	printk("KB: %s Setting SDHCI\n",__FUNCTION__);
 	/* Setup SDHCI */
 	s3c_sdhci0_set_platdata(&jet_hsmmc0_pdata);
-	s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
+	//s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
 	s3c_sdhci2_set_platdata(&spica_hsmmc2_pdata);
 
+	printk("KB: %s Setting Devices\n",__FUNCTION__);
 	/* Setup keypad */
-	samsung_keypad_set_platdata(&spica_keypad_pdata);
+//	samsung_keypad_set_platdata(&spica_keypad_pdata);
+	samsung_keypad_set_platdata(&jet_keypad_pdata);
+
+	/* Setup touchscreen */
+	s3c24xx_ts_set_platdata(&s3c_ts_platform);
 
 	/* Setup OneNAND */
 	s3c_set_platdata(&spica_onenand_pdata, sizeof(spica_onenand_pdata),
@@ -2673,7 +2873,7 @@ static void __init spica_machine_init(void)
 							&s3c64xx_device_iis0);
 
 	/* Setup power domains */
-	s3c_device_fb.dev.parent = &s3c64xx_device_pd[S3C64XX_DOMAIN_F].dev;
+	//s3c_device_fb.dev.parent = &s3c64xx_device_pd[S3C64XX_DOMAIN_F].dev;
 	samsung_pd_set_persistent(&s3c64xx_device_pd[S3C64XX_DOMAIN_F]);
 	s3c64xx_add_pd_devices();
 
@@ -2693,6 +2893,8 @@ static void __init spica_machine_init(void)
 	/* For telephony modules */
 	sec_class = class_create(THIS_MODULE, "sec");
 	WARN_ON(IS_ERR(sec_class));
+	printk("KB: %s Leaving\n",__FUNCTION__);
+
 }
 
 /*
