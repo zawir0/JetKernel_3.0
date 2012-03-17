@@ -52,6 +52,8 @@
 #include <linux/sec_jack.h>
 #include <linux/vibetonz.h>
 #include <linux/leds-regulator.h>
+#include <linux/memory_alloc.h>
+#include <linux/memblock.h>
 
 #include <sound/gt_i5700.h>
 #include <sound/ak4671.h>
@@ -715,47 +717,32 @@ static struct i2c_board_info spica_touch_i2c_devs[] __initdata = {
 };
 
 /*
- * Reserved memory (FIXME: Throw this shit away!)
+ * Memory configuration
  */
 
-#define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
+#define PHYS_SIZE			(208*1024*1024)
 
-#define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
-#define RESERVED_PMEM_END_ADDR 		(DRAM_END_ADDR)
+#define RAM_CONSOLE_SIZE		(1*1024*1024)
+#define PMEM_GPU1_SIZE			(32*1024*1024)
+#define PMEM_SIZE			(8*1024*1024)
 
-#define RAM_CONSOLE_SIZE		(SZ_2M)
-#define RESERVED_PMEM_GPU1		(SZ_16M + SZ_8M + SZ_4M + SZ_2M)
-#define RESERVED_PMEM			(SZ_8M)
-
-#define RAM_CONSOLE_START		(RESERVED_PMEM_END_ADDR \
-					- RAM_CONSOLE_SIZE)
-#define GPU1_RESERVED_PMEM_START	(RAM_CONSOLE_START \
-					- RESERVED_PMEM_GPU1)
-#define RESERVED_PMEM_START		(GPU1_RESERVED_PMEM_START \
-					- RESERVED_PMEM)
-#define PHYS_UNRESERVED_SIZE		(RESERVED_PMEM_START - PHYS_OFFSET)
-
-/*
- * Android PMEM
- */
+#define RESERVED_SIZE			(RAM_CONSOLE_SIZE \
+					+ PMEM_GPU1_SIZE \
+					+ PMEM_SIZE)
 
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data pmem_pdata = {
 	.name		= "pmem",
-	.no_allocator	= 1,
+	.allocator_type	= PMEM_ALLOCATORTYPE_ALLORNOTHING,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM,
+	.size		= PMEM_SIZE,
 };
 
 static struct android_pmem_platform_data pmem_gpu1_pdata = {
 	.name		= "pmem_gpu1",
-	.no_allocator	= 0,
+	.allocator_type	= PMEM_ALLOCATORTYPE_BITMAP,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= GPU1_RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM_GPU1,
+	.size		= PMEM_GPU1_SIZE,
 };
 
 static struct platform_device pmem_device = {
@@ -775,7 +762,7 @@ static struct platform_device *pmem_devices[] = {
 	&pmem_gpu1_device,
 };
 
-static void __init spica_add_mem_devices(void)
+static void __init spica_add_pmem_devices(void)
 {
 	unsigned i;
 	for (i = 0; i < ARRAY_SIZE(pmem_devices); ++i)
@@ -788,8 +775,25 @@ static void __init spica_add_mem_devices(void)
 		}
 }
 #else
-static inline void spica_add_mem_devices(void) {}
+static void __init spica_add_pmem_devices(void) {}
 #endif
+
+static void __init spica_reserve(void)
+{
+	unsigned long start = PHYS_OFFSET + PHYS_SIZE - RESERVED_SIZE;
+	unsigned long size = RESERVED_SIZE;
+	struct mem_pool *mpool;
+	int ret;
+
+	memory_pool_init();
+
+	ret = memblock_remove(start, size);
+	WARN_ON(ret);
+
+	mpool = initialize_memory_pool(start, size, 0);
+	if (!mpool)
+		pr_warning("failed to create mempool\n");
+}
 
 /*
  * Camera interface
@@ -1037,8 +1041,6 @@ static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
 
 static struct resource spica_ram_console_resources[] = {
 	{
-		.start	= RAM_CONSOLE_START,
-		.end	= RAM_CONSOLE_START + SZ_1M - 1,
 		.flags	= IORESOURCE_MEM,
 	}
 };
@@ -2161,14 +2163,7 @@ static struct platform_device *spica_mod_devices[] __initdata = {
  */
 
 static struct map_desc spica_iodesc[] __initdata = {
-#ifdef CONFIG_ANDROID_RAM_CONSOLE_EARLY_INIT
-	{
-		.virtual	= (unsigned long)S3C_ADDR_CPU(0x00300000),
-		.pfn		= __phys_to_pfn(RAM_CONSOLE_START),
-		.length		= SZ_1M,
-		.type		= MT_DEVICE,
-	},
-#endif
+
 };
 
 /*
@@ -2504,22 +2499,19 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 static void __init spica_fixup(struct machine_desc *desc,
 		struct tag *tags, char **cmdline, struct meminfo *mi)
 {
-	mi->nr_banks = 2;
+	mi->nr_banks = 1;
 
 	mi->bank[0].start = PHYS_OFFSET;
-	mi->bank[0].size = SZ_128M;
-
-	mi->bank[1].start = PHYS_OFFSET + SZ_128M;
-	mi->bank[1].size = PHYS_UNRESERVED_SIZE - SZ_128M;
+	mi->bank[0].size = PHYS_SIZE;
 }
 
 static void __init spica_map_io(void)
 {
-#ifdef CONFIG_SPICA_AHB_166
+#if defined(CONFIG_SPICA_AHB_166) || defined(CONFIG_SPICA_CPU_667_AHB_166)
 	u32 reg;
 #endif
 	s3c64xx_init_io(spica_iodesc, ARRAY_SIZE(spica_iodesc));
-#ifdef CONFIG_SPICA_AHB_166
+#if defined(CONFIG_SPICA_AHB_166)
 	reg = __raw_readl(S3C64XX_OTHERS);
 	reg &= ~S3C64XX_OTHERS_SYNCMODE;
 	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
@@ -2533,6 +2525,30 @@ static void __init spica_map_io(void)
 	__raw_writel(reg, S3C_CLK_DIV0);
 
 	__raw_writel(0xc14d0302, S3C_MPLL_CON);
+#elif defined(CONFIG_SPICA_CPU_667_AHB_166)
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg &= ~S3C64XX_OTHERS_SYNCMODE;
+	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	while (__raw_readl(S3C64XX_OTHERS) & S3C64XX_OTHERS_SYNCACK_MASK);
+
+	__raw_writel(0xc14d0301, S3C_APLL_CON);
+
+	reg = __raw_readl(S3C_CLK_DIV0);
+	reg &= ~S3C6400_CLKDIV0_HCLK2_MASK;
+	reg |= 0x1 << S3C6400_CLKDIV0_HCLK2_SHIFT;
+	__raw_writel(reg, S3C_CLK_DIV0);
+
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg |= S3C64XX_OTHERS_SYNCMODE;
+	reg |= S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	do {
+		reg = __raw_readl(S3C64XX_OTHERS);
+		reg &= S3C64XX_OTHERS_SYNCACK_MASK;
+	} while (reg != S3C64XX_OTHERS_SYNCACK_MASK);
 #endif
 	s3c24xx_init_clocks(12000000);
 	s3c24xx_init_uarts(spica_uartcfgs, ARRAY_SIZE(spica_uartcfgs));
@@ -2545,34 +2561,32 @@ static void spica_poweroff(void)
 	while(1);
 }
 
-#ifdef CONFIG_SPICA_AHB_166
-#define AHB_CLOCK	166500000
-#else
-#define AHB_CLOCK	133000000
-#endif
-
 static void __init spica_machine_init(void)
 {
-	struct clk *uclk1;
-	struct clk *dout_mpll;
-	struct clk *mfc_sclk;
+	struct clk *parent;
+	struct clk *clk;
+	unsigned long rate;
 
-	/* Setup DOUT MPLL frequency */
-	dout_mpll = clk_get(NULL, "dout_mpll");
-	clk_set_rate(dout_mpll, AHB_CLOCK);
+	/* Setup frequencies of some clocks */
+	clk = clk_get(NULL, "hclk");
+	rate = clk_get_rate(clk);
+	clk_put(clk);
 
-	mfc_sclk = clk_get(NULL, "mfc_sclk");
-	clk_set_rate(mfc_sclk, AHB_CLOCK);
-	clk_put(mfc_sclk);
+	parent = clk_get(NULL, "dout_mpll");
+	clk = clk_get(NULL, "uclk1");
+	clk_set_rate(parent, rate);
+	clk_set_parent(clk, parent);
+	clk_set_rate(clk, rate);
+	clk_put(clk);
+	clk_put(parent);
 
-	/* Setup UCLK1 frequency */
-	uclk1 = clk_get(NULL, "uclk1");
-	clk_set_parent(uclk1, dout_mpll);
-	clk_set_rate(uclk1, AHB_CLOCK);
+	clk = clk_get(NULL, "mfc_sclk");
+	clk_set_rate(clk, rate);
+	clk_put(clk);
 
-	/* Put the clocks */
-	clk_put(uclk1);
-	clk_put(dout_mpll);
+	/* Misc tweaks */
+	__raw_writel(0x7702, S3C64XX_QOS_OVERRIDE1);
+	__raw_writel(0x3ffff, S3C64XX_MISC_CON);
 
 	/* Setup interrupt filtering */
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON0);
@@ -2643,12 +2657,19 @@ static void __init spica_machine_init(void)
 	samsung_pd_set_persistent(&s3c64xx_device_pd[S3C64XX_DOMAIN_F]);
 	s3c64xx_add_pd_devices();
 
+	/* Setup RAM console */
+	spica_ram_console_resources[0].start =
+		allocate_contiguous_memory_nomap(RAM_CONSOLE_SIZE,
+								0, PAGE_SIZE);
+	spica_ram_console_resources[0].end = RAM_CONSOLE_SIZE +
+				spica_ram_console_resources[0].start - 1;
+
 	/* Register platform devices */
 	platform_add_devices(spica_devices, ARRAY_SIZE(spica_devices));
 	platform_add_devices(spica_mod_devices, ARRAY_SIZE(spica_mod_devices));
 
 	/* Register PMEM devices */
-	spica_add_mem_devices();
+	spica_add_pmem_devices();
 
 	/* Indicate full regulator constraints */
 	regulator_has_full_constraints();
@@ -2668,6 +2689,7 @@ MACHINE_START(GT_I5700, "Spica")
 	.init_irq	= s3c6410_init_irq,
 	.fixup		= spica_fixup,
 	.map_io		= spica_map_io,
+	.reserve	= spica_reserve,
 	.init_machine	= spica_machine_init,
 	.timer		= &s3c64xx_timer,
 MACHINE_END

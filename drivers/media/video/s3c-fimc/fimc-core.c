@@ -1661,7 +1661,6 @@ static int fimc_probe(struct platform_device *pdev)
 	ret = fimc_clk_get(fimc);
 	if (ret)
 		goto err_regs_unmap;
-	clk_set_rate(fimc->clock[CLK_BUS], drv_data->lclk_frequency);
 	clk_enable(fimc->clock[CLK_BUS]);
 
 	platform_set_drvdata(pdev, fimc);
@@ -1798,11 +1797,11 @@ static int __devexit fimc_remove(struct platform_device *pdev)
 {
 	struct fimc_dev *fimc = platform_get_drvdata(pdev);
 
-	if (!pm_runtime_suspended(&pdev->dev)) {
-		pm_runtime_disable(&pdev->dev);
-		fimc_runtime_suspend(&pdev->dev);
-		pm_runtime_set_suspended(&pdev->dev);
-	}
+	pm_runtime_get_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+	fimc_runtime_suspend(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+	pm_runtime_put(&pdev->dev);
 
 	fimc_unregister_m2m_device(fimc);
 	fimc_unregister_capture_device(fimc);
@@ -1844,7 +1843,6 @@ static struct samsung_fimc_driverdata fimc_drvdata_s3c64xx = {
 		[0] = &fimc_variant_s3c64xx,
 	},
 	.num_entities = 1,
-	.lclk_frequency = 133000000UL,
 };
 
 static struct platform_device_id fimc_driver_ids[] = {
