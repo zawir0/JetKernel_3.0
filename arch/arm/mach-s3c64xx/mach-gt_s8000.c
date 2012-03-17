@@ -1239,10 +1239,9 @@ static struct samsung_keypad_platdata spica_keypad_pdata __initdata = {
 
 static uint32_t jet_keymap[] __initdata = {
 	/* KEY(row, col, keycode) */
-	KEY(0, 0, 1), KEY(0, 1, 249), KEY(0, 2, 9),
-	KEY(1, 0, 17), KEY(1, 1, 10), KEY(1, 2,2),
+	KEY(0, 0, 1), KEY(0, 1, 9), KEY(0, 2, 17),
+	KEY(1, 0, 2), KEY(1, 1, 10), /* Reserved  ,*/
 	KEY(2, 0, 3), KEY(2, 1, 11), KEY(2, 2, 19),
-//	KEY(3, 0, 204), KEY(3, 1, 212) /* Reserved  */,
 };
 
 static struct matrix_keymap_data jet_keymap_data __initdata = {
