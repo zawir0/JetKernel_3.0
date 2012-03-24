@@ -28,7 +28,7 @@
 #include <linux/usb/composite.h>
 #include <linux/usb/cdc.h>
 
-#include "gadget_chips.h"
+#include "../gadget_chips.h"
 
 
 /*
@@ -113,16 +113,14 @@ int ecm_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
 int ncm_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
 int eem_bind_config(struct usb_configuration *c);
 
-#ifdef USB_ETH_RNDIS
+#if defined(USB_ETH_RNDIS) || defined(CONFIG_USB_ANDROID_RNDIS)
 
-int rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
-				u32 vendorID, const char *manufacturer);
+int rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN]);
 
 #else
 
 static inline int
-rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
-				u32 vendorID, const char *manufacturer)
+rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 {
 	return 0;
 }
