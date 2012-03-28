@@ -215,7 +215,7 @@
 /* Both edges */
 #define IRQ_BLUETOOTH		IRQ_EINT(22)
 /* Both edges */
-#define IRQ_CHARGING		IRQ_EINT(25)
+#define IRQ_WLAN		IRQ_EINT(25)
 
 /*
  * UART
@@ -281,10 +281,10 @@ static struct akm8973_platform_data spica_akm8973_pdata = {
 
 static struct i2c_board_info jet_sensor_i2c_devs[] __initdata = {
 	{
-//		.type		= "bma023",
-//		.addr		= 0x38,
+		.type		= "kionix-kxsd9",
+		.addr		= 0x18,
 //		.irq		= IRQ_MSENSE,	//IRQ_BMA023,
-//	}, {
+	}, {
 		.type		= "akm8973",
 		.addr		= 0x1c,
 //		.irq		= IRQ_AKM8973,
@@ -1728,8 +1728,8 @@ static struct resource spica_wlan_resources[] = {
 	{
 		.name	= "bcmdhd_wlan_irq",
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_LOWLEVEL,
-		.start	= GPIO_WLAN_HOST_WAKE, // IRQ_WLAN,
-		.end	= GPIO_WLAN_HOST_WAKE, // IRQ_WLAN,
+		.start	= IRQ_WLAN,
+		.end	= IRQ_WLAN,
 	},
 };
 
@@ -2782,7 +2782,6 @@ static void __init spica_machine_init(void)
 	struct clk *uclk1;
 	struct clk *dout_mpll;
 
-	printk("KB: %s Entering\n",__FUNCTION__);
 	/* Setup DOUT MPLL frequency */
 	dout_mpll = clk_get(NULL, "dout_mpll");
 	clk_set_rate(dout_mpll, 133000000);
@@ -2796,24 +2795,17 @@ static void __init spica_machine_init(void)
 	clk_put(uclk1);
 	clk_put(dout_mpll);
 
-	printk("KB: %s Setting clocks\n",__FUNCTION__);
-
 	/* Setup interrupt filtering */
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON0);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON1);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON2);
 	__raw_writel(0x00008888, S3C64XX_EINT0FLTCON3);
 
-	printk("KB: %s Setting GPIOs\n",__FUNCTION__);
-
 	/* Configure GPIO pins */
 	s3c_pin_config(spica_pin_config, ARRAY_SIZE(spica_pin_config));
 
-	printk("KB: %s Setting sleep GPIOs\n",__FUNCTION__);
-
 	s3c_pin_slp_config(spica_slp_config, ARRAY_SIZE(spica_slp_config));
 
-	printk("KB: %s Setting BT_WLAN GPIOs\n",__FUNCTION__);
 	/* Setup Bluetooth and WLAN */
 	spica_bt_lpm_init();
 	gpio_request(GPIO_BT_WLAN_REG_ON, "WLAN/BT power");
@@ -2821,16 +2813,11 @@ static void __init spica_machine_init(void)
 	gpio_request(GPIO_BT_RST_N, "BT reset");
 //	gpio_request(GPIO_MICBIAS_EN, "MIC bias");
 
-	printk("KB: %s Setting PMIC GPIOs\n",__FUNCTION__);
 	/* Setup power management */
 	gpio_request(GPIO_PDA_PS_HOLD, "Power hold");
 	pm_power_off = spica_poweroff;
 
-	printk("KB: %s Setting PMIC\n",__FUNCTION__);
-
 	s3c_pm_init();
-
-	printk("KB: %s Setting I2C\n",__FUNCTION__);
 
 	/* Register I2C devices */
 	s3c_i2c0_set_platdata(&jet_sensor_i2c);
@@ -2845,17 +2832,14 @@ static void __init spica_machine_init(void)
 	i2c_register_board_info(jet_audio_i2c.id, jet_audio_i2c_devs,
 					ARRAY_SIZE(jet_audio_i2c_devs));
 
-	printk("KB: %s Setting FB\n",__FUNCTION__);
 	/* Setup framebuffer */
 	//s3c_fb_set_platdata(&spica_lcd_pdata);
 
-	printk("KB: %s Setting SDHCI\n",__FUNCTION__);
 	/* Setup SDHCI */
 	s3c_sdhci0_set_platdata(&jet_hsmmc0_pdata);
 	//s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
 	s3c_sdhci2_set_platdata(&spica_hsmmc2_pdata);
 
-	printk("KB: %s Setting Devices\n",__FUNCTION__);
 	/* Setup keypad */
 //	samsung_keypad_set_platdata(&spica_keypad_pdata);
 	samsung_keypad_set_platdata(&jet_keypad_pdata);
@@ -2892,7 +2876,6 @@ static void __init spica_machine_init(void)
 	/* For telephony modules */
 	sec_class = class_create(THIS_MODULE, "sec");
 	WARN_ON(IS_ERR(sec_class));
-	printk("KB: %s Leaving\n",__FUNCTION__);
 
 }
 
