@@ -44,6 +44,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/bml.h>
 #include <linux/power/spica_battery.h>
+#include <linux/platform_data/spica_dpram.h>
 #include <linux/input/qt5480_ts.h>
 #include <linux/wlan_plat.h>
 #include <linux/akm8973.h>
@@ -1765,17 +1766,6 @@ static struct resource spica_dpram_resources[] = {
 	}
 };
 
-struct dpram_platform_data {
-	unsigned int gpio_phone_on;
-	unsigned int gpio_phone_rst_n;
-	unsigned int gpio_phone_active;
-	unsigned int gpio_cp_boot_sel;
-	unsigned int gpio_usim_boot;
-	unsigned int gpio_pda_active;
-	unsigned int gpio_onedram_int_n;
-	unsigned int gpio_sim_detect_n;
-};
-
 static struct dpram_platform_data spica_dpram_pdata = {
 	.gpio_phone_on		= GPIO_PHONE_ON,
 	.gpio_phone_rst_n	= GPIO_PHONE_RST_N,
@@ -1788,7 +1778,7 @@ static struct dpram_platform_data spica_dpram_pdata = {
 };
 
 static struct platform_device spica_dpram_device = {
-	.name		= "samsung-dpram",
+	.name		= "spica-dpram",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(spica_dpram_resources),
 	.resource	= spica_dpram_resources,
