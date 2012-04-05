@@ -128,4 +128,5 @@ source "drivers/hwspinlock/Kconfig"
 
 source "drivers/clocksource/Kconfig"
 
+source "drivers/jetmodules/Kconfig"
 endmenu

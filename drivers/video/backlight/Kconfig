@@ -334,6 +334,13 @@ config BACKLIGHT_S6D05A
 	  If you have a LCD screen driven by a Samsung S6D05A controller, say Y
 	  here to enable its driver.
 
+config BACKLIGHT_AMS310FN07
+	tristate "Backlight driver for AMS310FN07 AMOLED display in Jet (GT-S8000)"
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  If you have a LCD screen driven by a AMS310FN07 AMOLED display, say Y
+	  here to enable its driver.
+
 config BACKLIGHT_TINY6410
 	tristate "Backlight driver for Tiny6410 board LCD module"
 	depends on BACKLIGHT_CLASS_DEVICE && TINY6410_1WIRE
