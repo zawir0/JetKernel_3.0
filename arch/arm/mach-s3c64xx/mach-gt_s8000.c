@@ -67,6 +67,7 @@
 #include <sound/ak4671.h>
 
 #include <video/s6d05a.h>
+#include <video/ams310fn07.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -1012,7 +1013,6 @@ static inline void spica_add_mem_devices(void) {}
 
 #endif
 
-
 /*
  * LCD screen
  */
@@ -1032,11 +1032,14 @@ static struct platform_device spica_s6d05a = {
 	},
 };
 
+#if 0
 struct platform_device sec_device_backlight = {
 	.name   = "ams320fs01-backlight",
 	.id     = -1,
 };
-/*
+
+#else
+
 static struct ams310fn07_platform_data jet_ams310fn07_pdata = {
 	.reset_gpio	= GPIO_LCD_RST_N,
 	.cs_gpio	= GPIO_LCD_CS_N,
@@ -1052,7 +1055,7 @@ static struct platform_device jet_ams310fn07 = {
 		.parent		= &s3c_device_fb.dev
 	},
 };
-*/
+#endif
 /*
  * SDHCI platform data
  */
@@ -1138,6 +1141,7 @@ static struct platform_device mmc2_fixed_voltage = {
 /*
  * Framebuffer
  */
+#define SECOND_FB 1
 
 static struct s3c_fb_pd_win jet_fb_win[] = {
 	[0] = {
@@ -1190,6 +1194,25 @@ static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC
 			| VIDCON1_INV_VCLK,
+	.dithmode	= DITHMODE_R_POS_8BIT | DITHMODE_G_POS_8BIT
+			| DITHMODE_B_POS_8BIT | DITHMODE_DITH_EN,
+};
+
+static void jet_fb_setup_gpio(void)
+{
+	/* Nothing to do here */
+}
+
+static struct s3c_fb_platdata jet_lcd_pdata __initdata = {
+	.setup_gpio	= jet_fb_setup_gpio,
+	.win[0]		= &jet_fb_win[0],
+#ifdef SECOND_FB
+	.win[1]		= &jet_fb_win[1],
+#endif
+	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
+//			| VIDCON0_CLKSEL_LCD,
+	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC
+			| VIDCON1_INV_VDEN,
 	.dithmode	= DITHMODE_R_POS_8BIT | DITHMODE_G_POS_8BIT
 			| DITHMODE_B_POS_8BIT | DITHMODE_DITH_EN,
 };
@@ -2138,7 +2161,8 @@ static struct platform_device *spica_devices[] __initdata = {
 	&jet_fm_i2c,
 	&jet_audio_i2c,
 	//&spica_s6d05a,
-	&sec_device_backlight,
+	&jet_ams310fn07,
+	//&sec_device_backlight,
 	&spica_ram_console,
 	//&spica_gpio_keys,
 	&jet_gpio_keys,
@@ -2833,7 +2857,7 @@ static void __init spica_machine_init(void)
 					ARRAY_SIZE(jet_audio_i2c_devs));
 
 	/* Setup framebuffer */
-	//s3c_fb_set_platdata(&spica_lcd_pdata);
+	s3c_fb_set_platdata(&jet_lcd_pdata);
 
 	/* Setup SDHCI */
 	s3c_sdhci0_set_platdata(&jet_hsmmc0_pdata);
@@ -2856,7 +2880,7 @@ static void __init spica_machine_init(void)
 							&s3c64xx_device_iis0);
 
 	/* Setup power domains */
-	//s3c_device_fb.dev.parent = &s3c64xx_device_pd[S3C64XX_DOMAIN_F].dev;
+	s3c_device_fb.dev.parent = &s3c64xx_device_pd[S3C64XX_DOMAIN_F].dev;
 	samsung_pd_set_persistent(&s3c64xx_device_pd[S3C64XX_DOMAIN_F]);
 	s3c64xx_add_pd_devices();
 

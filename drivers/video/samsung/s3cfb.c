@@ -365,9 +365,9 @@ int s3cfb_onoff_win(s3c_fb_info_t *fbi, int onoff)
 	int win_num =  fbi->win_id;
 
 	if (onoff)
-		writel(readl(S3C_WINCON0 + (0x04 * win_num)) | WINCONx_ENWIN, S3C_WINCON0 + (0x04 * win_num));
+		writel(readl(S3C_WINCON0 + (0x04 * win_num)) | S3C_WINCONx_ENWIN_F_ENABLE, S3C_WINCON0 + (0x04 * win_num));
 	else
-		writel(readl(S3C_WINCON0 + (0x04 * win_num)) &~ (WINCONx_ENWIN), S3C_WINCON0 + (0x04 * win_num));
+		writel(readl(S3C_WINCON0 + (0x04 * win_num)) &~ (S3C_WINCONx_ENWIN_F_ENABLE), S3C_WINCON0 + (0x04 * win_num));
 
 	return 0;
 }
@@ -377,9 +377,9 @@ int s3cfb_onoff_color_key_alpha(s3c_fb_info_t *fbi, int onoff)
 	int win_num =  fbi->win_id - 1;
 
 	if (onoff)
-		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) | WxKEYCON0_KEYBL_EN, S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) | S3C_WxKEYCON0_KEYBLEN_ENABLE, S3C_W1KEYCON0 + (0x08 * win_num));
 	else
-		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) &~ (WxKEYCON0_KEYBL_EN), S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) &~ (S3C_WxKEYCON0_KEYBLEN_ENABLE), S3C_W1KEYCON0 + (0x08 * win_num));
 
 	return 0;
 }
@@ -389,9 +389,9 @@ int s3cfb_onoff_color_key(s3c_fb_info_t *fbi, int onoff)
 	int win_num =  fbi->win_id - 1;
 
 	if (onoff)
-		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) | WxKEYCON0_KEYEN_F, S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) | S3C_WxKEYCON0_KEYEN_F_ENABLE, S3C_W1KEYCON0 + (0x08 * win_num));
 	else
-		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) &~ (WxKEYCON0_KEYEN_F), S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(readl(S3C_W1KEYCON0 + (0x08 * win_num)) &~ (S3C_WxKEYCON0_KEYEN_F_ENABLE), S3C_W1KEYCON0 + (0x08 * win_num));
 
 	return 0;
 }
@@ -422,10 +422,10 @@ int s3cfb_set_color_key_registers(s3c_fb_info_t *fbi, s3c_color_key_info_t colke
 		printk("Invalid BPP has been given!\n");
 
 	if (colkey_info.direction == S3C_FB_COLOR_KEY_DIR_BG)
-		writel(WxKEYCON0_COMPKEY(WxKEYCON0_COMPKEY_LIMIT&(compkey)) | 0x00/*S3C_WxKEYCON0_DIRCON_MATCH_FG_IMAGE*/, S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(S3C_WxKEYCON0_COMPKEY(compkey) | S3C_WxKEYCON0_DIRCON_MATCH_FG_IMAGE, S3C_W1KEYCON0 + (0x08 * win_num));
 
 	else if (colkey_info.direction == S3C_FB_COLOR_KEY_DIR_FG)
-		writel(WxKEYCON0_COMPKEY(WxKEYCON0_COMPKEY_LIMIT&(compkey)) | WxKEYCON0_DIRCON, S3C_W1KEYCON0 + (0x08 * win_num));
+		writel(S3C_WxKEYCON0_COMPKEY(compkey) | S3C_WxKEYCON0_DIRCON_MATCH_BG_IMAGE, S3C_W1KEYCON0 + (0x08 * win_num));
 
 	else
 		printk("Color key direction is not correct :: %d!\n", colkey_info.direction);
@@ -459,7 +459,7 @@ int s3cfb_set_color_value(s3c_fb_info_t *fbi, s3c_color_val_info_t colval_info)
 	} else
 		printk("Invalid BPP has been given!\n");
 
-	writel(WxKEYCON1_COLVAL(WxKEYCON1_COLVAL_LIMIT&(colval)), S3C_W1KEYCON1 + (0x08 * win_num));
+	writel(S3C_WxKEYCON1_COLVAL(colval), S3C_W1KEYCON1 + (0x08 * win_num));
 
 	return 0;
 }
@@ -471,8 +471,8 @@ static int s3cfb_set_bpp(s3c_fb_info_t *fbi, int bpp)
 	unsigned int val;
 
 	val = readl(S3C_WINCON0 + (0x04 * win_num));
-	val &= ~(WINCON0_BPPMODE_MASK | WINCON1_BLD_PIX);
-	val |= WINCON1_ALPHA_SEL;
+	val &= ~(S3C_WINCONx_BPPMODE_F_MASK | S3C_WINCONx_BLD_PIX_MASK);
+	val |= S3C_WINCONx_ALPHA_SEL_1;
 		
 	switch (bpp) {
 	case 1:
@@ -483,25 +483,25 @@ static int s3cfb_set_bpp(s3c_fb_info_t *fbi, int bpp)
 		break;
 
 	case 16:
-		writel(val | WINCON0_BPPMODE_16BPP_565 | 0x00/*S3C_WINCONx_BLD_PIX_PLANE*/, S3C_WINCON0 + (0x04 * win_num));
+		writel(val | S3C_WINCONx_BPPMODE_F_16BPP_565 | S3C_WINCONx_BLD_PIX_PLANE, S3C_WINCON0 + (0x04 * win_num));
 		var->bits_per_pixel = bpp;
 		s3c_fimd.bytes_per_pixel = 2;
 		break;
 
 	case 24:
-		writel(val | WINCON0_BPPMODE_24BPP_888 | 0x00/*S3C_WINCONx_BLD_PIX_PLANE*/, S3C_WINCON0 + (0x04 * win_num));
+		writel(val | S3C_WINCONx_BPPMODE_F_24BPP_888 | S3C_WINCONx_BLD_PIX_PLANE, S3C_WINCON0 + (0x04 * win_num));
 		var->bits_per_pixel = bpp;
 		s3c_fimd.bytes_per_pixel = 4;
 		break;
 
 	case 25:
-		writel(val | WINCON1_BPPMODE_25BPP_A1888 | 0x00/*S3C_WINCONx_BLD_PIX_PLANE*/, S3C_WINCON0 + (0x04 * win_num));
+		writel(val | S3C_WINCONx_BPPMODE_F_25BPP_A888 | S3C_WINCONx_BLD_PIX_PLANE, S3C_WINCON0 + (0x04 * win_num));
 		var->bits_per_pixel = bpp;
 		s3c_fimd.bytes_per_pixel = 4;
 		break;
 
 	case 28:
-		writel(val | WINCON1_BPPMODE_28BPP_A4888 | WINCON1_BLD_PIX, S3C_WINCON0 + (0x04 * win_num));
+		writel(val | S3C_WINCONx_BPPMODE_F_28BPP_A888 | S3C_WINCONx_BLD_PIX_PIXEL, S3C_WINCON0 + (0x04 * win_num));
 		var->bits_per_pixel = bpp;
 		s3c_fimd.bytes_per_pixel = 4;
 		break;
@@ -523,7 +523,7 @@ void s3cfb_stop_lcd(void)
 	local_irq_save(flags);
 
 	tmp = readl(S3C_VIDCON0);
-	writel(tmp & ~(VIDCON0_ENVID | VIDCON0_ENVID_F), S3C_VIDCON0);
+	writel(tmp & ~(S3C_VIDCON0_ENVID_ENABLE | S3C_VIDCON0_ENVID_F_ENABLE), S3C_VIDCON0);
 
 	local_irq_restore(flags);
 }
@@ -538,7 +538,7 @@ void s3cfb_start_lcd(void)
 	local_irq_save(flags);
 
 	tmp = readl(S3C_VIDCON0);
-	writel(tmp | VIDCON0_ENVID | VIDCON0_ENVID_F, S3C_VIDCON0);
+	writel(tmp | S3C_VIDCON0_ENVID_ENABLE | S3C_VIDCON0_ENVID_F_ENABLE, S3C_VIDCON0);
 
 	local_irq_restore(flags);
 }
@@ -826,7 +826,7 @@ static int __init s3cfb_probe(struct platform_device *pdev)
 	s3c_fb_info_t *info;
 
 	char driver_name[] = "s3cfb";
-	int index = 0, ret = 0, size;
+	int index = 0, ret, size;
 
 	fbinfo = framebuffer_alloc(sizeof(s3c_fb_info_t), &pdev->dev);
 
@@ -909,16 +909,12 @@ static int __init s3cfb_probe(struct platform_device *pdev)
 		goto release_irq;
 	}
 
-	//msleep(5);
-
-	printk("KB: %s Setting FBs\n", __func__);
+	msleep(5);
 
 	for (index = 0; index < S3C_FB_NUM; index++) {
 		s3c_fb_info[index].mem = info->mem;
 		s3c_fb_info[index].io = info->io;
 		s3c_fb_info[index].clk = info->clk;
-
-		printk("KB: %s Setting FB no. %d\n", __func__, index);
 
 		s3cfb_init_fbinfo(&s3c_fb_info[index], driver_name, index);
 

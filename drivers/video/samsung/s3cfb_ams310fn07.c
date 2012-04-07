@@ -44,8 +44,8 @@
 #define GPIO_LCD_RST_N		S3C64XX_GPO(10)
 #define GPIO_LCD_SCLK		S3C64XX_GPO(12)
 
-#define GPIO_LEVEL_LOW      		0
-#define GPIO_LEVEL_HIGH     		1
+#define GPIO_LEVEL_HIGH		1
+#define GPIO_LEVEL_LOW		0
 
 #define BACKLIGHT_STATUS_ALC	0x100
 #define BACKLIGHT_LEVEL_VALUE	0x0FF	/* 0 ~ 255 */
@@ -120,18 +120,18 @@ EXPORT_SYMBOL(backlight_level_ctrl);
 
 static void s3cfb_set_fimd_info(void)
 {
-	s3c_fimd.vidcon1	= VIDCON1_INV_HSYNC |
-							VIDCON1_INV_VSYNC |
-							VIDCON1_INV_VDEN |VIDCON1_INV_VCLK;
+	s3c_fimd.vidcon1	= S3C_VIDCON1_IHSYNC_INVERT |
+							S3C_VIDCON1_IVSYNC_INVERT |
+							S3C_VIDCON1_IVDEN_INVERT|S3C_VIDCON1_IVCLK_RISE_EDGE;
 
-	s3c_fimd.vidtcon0 	= VIDTCON0_VBPD(VIDTCON0_VBPD_LIMIT&(S3C_FB_VBP - 1)) |
-							VIDTCON0_VFPD(VIDTCON0_VFPD_LIMIT&(S3C_FB_VFP - 1)) |
-							VIDTCON0_VSPW(VIDTCON0_VSPW_LIMIT&(S3C_FB_VSW - 1));
-	s3c_fimd.vidtcon1	= VIDTCON1_HBPD(VIDTCON1_HBPD_LIMIT&(S3C_FB_HBP - 1)) |
-							VIDTCON1_HFPD(VIDTCON1_HFPD_LIMIT&(S3C_FB_HFP - 1)) |
-							VIDTCON1_HSPW(VIDTCON1_HSPW_LIMIT&(S3C_FB_HSW - 1));
-	s3c_fimd.vidtcon2	= VIDTCON2_LINEVAL(VIDTCON2_LINEVAL_LIMIT&(S3C_FB_VRES - 1)) |
-							VIDTCON2_HOZVAL(VIDTCON2_HOZVAL_LIMIT&(S3C_FB_HRES - 1));
+	s3c_fimd.vidtcon0 	= S3C_VIDTCON0_VBPD(S3C_FB_VBP - 1) |
+							S3C_VIDTCON0_VFPD(S3C_FB_VFP - 1) |
+							S3C_VIDTCON0_VSPW(S3C_FB_VSW - 1);
+	s3c_fimd.vidtcon1	= S3C_VIDTCON1_HBPD(S3C_FB_HBP - 1) |
+							S3C_VIDTCON1_HFPD(S3C_FB_HFP - 1) |
+							S3C_VIDTCON1_HSPW(S3C_FB_HSW - 1);
+	s3c_fimd.vidtcon2	= S3C_VIDTCON2_LINEVAL(S3C_FB_VRES - 1) |
+							S3C_VIDTCON2_HOZVAL(S3C_FB_HRES - 1);
 
 	s3c_fimd.vidosd0a 	= S3C_VIDOSDxA_OSD_LTX_F(0) |
 							S3C_VIDOSDxA_OSD_LTY_F(0);
@@ -1724,9 +1724,9 @@ void lcd_power_ctrl(s32 value)
 {
 		s32 i;	
 		u8 data;
-//		printk(" LCD power ctrl called \n" );
+		printk(" LCD power ctrl called \n" );
 		if (value) {
-			//printk("Lcd power on sequence start\n");
+			printk("Lcd power on sequence start\n");
 			/* Power On Sequence */
 		
 			/* Reset Asseert */
@@ -1779,14 +1779,14 @@ void lcd_power_ctrl(s32 value)
 			
 			for (i = 0; i < DISPLAY_ON_SETTINGS; i++)
 				setting_table_write(&display_on_setting_table[i]);	
-			//printk("Lcd power on sequence end\n");
+			printk("Lcd power on sequence end\n");
 
 }
 		else {
-			//printk("Lcd power off sequence start\n");	
+			printk("Lcd power off sequence start\n");
 			/* Power Off Sequence */
 			for (i = 0; i < DISPLAY_OFF_SETTINGS; i++)
-				setting_table_write(&display_off_setting_table[i]);	
+				setting_table_write(&display_off_setting_table[i]);
 			
 			//for (i = 0; i < POWER_OFF_SETTINGS; i++)
 			//	setting_table_write(&power_off_setting_table[i]);	
@@ -1823,7 +1823,7 @@ void backlight_ctrl(s32 value)
 	u8 data;
 	int param_lcd_level = value;
 
-//	printk("backlight _ctrl is called !! \n");
+	printk("backlight _ctrl is called !! \n");
 
 	value &= BACKLIGHT_LEVEL_VALUE;
 
@@ -1834,7 +1834,7 @@ void backlight_ctrl(s32 value)
 		else	
 			level = (((value - 15) / 15)); 
 	if (level) {	
-//	printk(" backlight_ctrl : level:%x, old_level: %x \n", level, old_level);		
+	printk(" backlight_ctrl : level:%x, old_level: %x \n", level, old_level);
 		if (level != old_level) {
 			old_level = level;
 
@@ -1848,7 +1848,7 @@ void backlight_ctrl(s32 value)
 				lcd_power_ctrl(ON);
 			}
 
-		//	printk("LCD Backlight level setting value ==> %d  , level ==> %d \n",value,level);
+			printk("LCD Backlight level setting value ==> %d  , level ==> %d \n",value,level);
 			
 			switch(lcd_gamma_present)
 			{
@@ -1880,7 +1880,7 @@ void backlight_ctrl(s32 value)
 
 void backlight_level_ctrl(s32 value)
 {
-//	printk("backlight level ctrl called ! \n");
+	printk("backlight level ctrl called ! \n");
 	if ((value < BACKLIGHT_LEVEL_MIN) ||	/* Invalid Value */
 		(value > BACKLIGHT_LEVEL_MAX) ||
 		(value == backlight_level))	/* Same Value */
@@ -1916,7 +1916,7 @@ static DEFINE_MUTEX(ams320fs01_backlight_lock);
 
 static void ams320fs01_set_backlight_level(u8 level)
 {
-//	printk("ams320fs01_set_backlight_level");
+	printk("ams320fs01_set_backlight_level");
 	if (backlight_level == level)
 		return;
 
@@ -1953,7 +1953,7 @@ static int ams320fs01_release (struct inode *inode, struct file *filp)
     return 0;
 }
 
-static int ams320fs01_ioctl(struct file *filp,
+static long ams320fs01_ioctl(struct file *filp,
 	                        unsigned int ioctl_cmd,  unsigned long arg)
 {
 	int ret = 0;
@@ -2080,7 +2080,9 @@ void s3cfb_init_hw(void)
 	//lcd_gpio_init();
 	
 	//backlight_gpio_init();
-	
+
+	lcd_power_ctrl(ON); //-locks up
+
 	lcd_power = ON;
 
 	//backlight_level = BACKLIGHT_LEVEL_DEFAULT;

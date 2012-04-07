@@ -21,18 +21,24 @@
 #include <linux/i2c/maximi2c.h>
 
 #include <plat/gpio-cfg.h>
-#include <plat/regs-gpio.h>
-#include <plat/regs-lcd.h>
+//#include <plat/regs-gpio.h>
+//#include <plat/regs-lcd.h>
 
 #include <mach/hardware.h>
 
-#include "s3cfb.h"
+#include <linux/wait.h>
+#include <linux/spi/spi.h>
+#include <linux/backlight.h>
+#include <linux/regulator/consumer.h>
+#include <linux/pm_runtime.h>
+//#include <linux/gpio.h>
 
 #include <linux/miscdevice.h>
-#include "s3cfb_ams320fs01_ioctl.h"
 
-#include <mach/param.h>
+//#include <mach/param.h>
 #include <mach/gpio.h>
+
+#include <video/ams310fn07.h>
 
 #define BACKLIGHT_STATUS_ALC	0x100
 #define BACKLIGHT_LEVEL_VALUE	0x0FF	/* 0 ~ 255 */
@@ -41,6 +47,18 @@
 #define BACKLIGHT_LEVEL_MAX		BACKLIGHT_LEVEL_VALUE
 
 #define BACKLIGHT_LEVEL_DEFAULT	100		/* Default Setting */
+
+#define ON 	1
+#define OFF	0
+
+#define GPIO_LCD_CS_N		S3C64XX_GPO(6)
+#define GPIO_LCD_SDI		S3C64XX_GPO(7)
+#define GPIO_LCD_RST_N		S3C64XX_GPO(10)
+#define GPIO_LCD_SCLK		S3C64XX_GPO(12)
+
+#define GPIO_LEVEL_HIGH		1
+#define GPIO_LEVEL_LOW		0
+
 //#ifdef CONFIG_FB_S3C_LCD_INIT
 //#define CONFIG_FB_S3C_LCD_INIT
 //#endif
@@ -48,35 +66,7 @@
 extern void s3cfb_enable_clock_power(void);
 extern int s3cfb_is_clock_on(void);
 
-/* sec_bsp_tsim 2009.08.12 : reset lcd before reboot this machine. */
-void lcd_reset(void)
-{
-	gpio_set_value(GPIO_LCD_RST_N, GPIO_LEVEL_LOW);
-};
-EXPORT_SYMBOL(lcd_reset);
-
-
-int lcd_power = OFF;
-EXPORT_SYMBOL(lcd_power);
-
-void lcd_power_ctrl(s32 value);
-EXPORT_SYMBOL(lcd_power_ctrl);
-
-
-
-
-int backlight_power = OFF;
-EXPORT_SYMBOL(backlight_power);
-
-void backlight_power_ctrl(s32 value);
-EXPORT_SYMBOL(backlight_power_ctrl);
-
-int backlight_level = BACKLIGHT_LEVEL_DEFAULT;
-EXPORT_SYMBOL(backlight_level);
-
-void backlight_level_ctrl(s32 value);
-EXPORT_SYMBOL(backlight_level_ctrl);
-
+#if 0
 #define S3C_FB_HFP			64 // 8 DIFF ams369fg	/* Front Porch */
 #define S3C_FB_HSW			2 // 1 DIFF ams369fg	/* Hsync Width */
 #define S3C_FB_HBP			62 // 7	DIFF ams369fg	/* Back Porch */
@@ -172,93 +162,11 @@ static void s3cfb_set_fimd_info(void)
 	s3c_fimd.backlight_min = BACKLIGHT_LEVEL_MIN;
 	s3c_fimd.backlight_max = BACKLIGHT_LEVEL_MAX;
 }
-#if 0
-static void lcd_gpio_init(void)
-{
-	/* B(0:7) */
-	s3c_gpio_cfgpin(GPIO_LCD_B_0, S3C_GPIO_SFN(GPIO_LCD_B_0_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_1, S3C_GPIO_SFN(GPIO_LCD_B_1_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_2, S3C_GPIO_SFN(GPIO_LCD_B_2_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_3, S3C_GPIO_SFN(GPIO_LCD_B_3_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_4, S3C_GPIO_SFN(GPIO_LCD_B_4_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_5, S3C_GPIO_SFN(GPIO_LCD_B_5_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_6, S3C_GPIO_SFN(GPIO_LCD_B_6_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_B_7, S3C_GPIO_SFN(GPIO_LCD_B_7_AF));
-	/* G(0:7) */
-	s3c_gpio_cfgpin(GPIO_LCD_G_0, S3C_GPIO_SFN(GPIO_LCD_G_0_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_1, S3C_GPIO_SFN(GPIO_LCD_G_1_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_2, S3C_GPIO_SFN(GPIO_LCD_G_2_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_3, S3C_GPIO_SFN(GPIO_LCD_G_3_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_4, S3C_GPIO_SFN(GPIO_LCD_G_4_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_5, S3C_GPIO_SFN(GPIO_LCD_G_5_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_6, S3C_GPIO_SFN(GPIO_LCD_G_6_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_G_7, S3C_GPIO_SFN(GPIO_LCD_G_7_AF));
-	/* R(0:7) */
-	s3c_gpio_cfgpin(GPIO_LCD_R_0, S3C_GPIO_SFN(GPIO_LCD_R_0_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_1, S3C_GPIO_SFN(GPIO_LCD_R_1_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_2, S3C_GPIO_SFN(GPIO_LCD_R_2_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_3, S3C_GPIO_SFN(GPIO_LCD_R_3_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_4, S3C_GPIO_SFN(GPIO_LCD_R_4_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_5, S3C_GPIO_SFN(GPIO_LCD_R_5_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_6, S3C_GPIO_SFN(GPIO_LCD_R_6_AF));
-	s3c_gpio_cfgpin(GPIO_LCD_R_7, S3C_GPIO_SFN(GPIO_LCD_R_7_AF));
-	/* HSYNC */
-	s3c_gpio_cfgpin(GPIO_LCD_HSYNC, S3C_GPIO_SFN(GPIO_LCD_HSYNC_AF));
-	/* VSYNC */
-	s3c_gpio_cfgpin(GPIO_LCD_VSYNC, S3C_GPIO_SFN(GPIO_LCD_VSYNC_AF));
-	/* DE */
-	s3c_gpio_cfgpin(GPIO_LCD_DE, S3C_GPIO_SFN(GPIO_LCD_DE_AF));
-	/* CLK */
-	s3c_gpio_cfgpin(GPIO_LCD_CLK, S3C_GPIO_SFN(GPIO_LCD_CLK_AF));
 
-	/* LCD_RST_N */
-	if (gpio_is_valid(GPIO_LCD_RST_N)) {
-		if (gpio_request(GPIO_LCD_RST_N, S3C_GPIO_LAVEL(GPIO_LCD_RST_N))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_RST_N!\n");
-		gpio_direction_output(GPIO_LCD_RST_N, GPIO_LEVEL_HIGH);
-	}
-	s3c_gpio_setpull(GPIO_LCD_RST_N, S3C_GPIO_PULL_NONE);
-	/* LCD_ID */
-	if (gpio_is_valid(GPIO_LCD_ID)) {
-		if (gpio_request(GPIO_LCD_ID, S3C_GPIO_LAVEL(GPIO_LCD_ID))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_ID!\n");
-		gpio_direction_input(GPIO_LCD_ID);
-	}
-	s3c_gpio_setpull(GPIO_LCD_ID, S3C_GPIO_PULL_NONE);
-	/* LCD_SCLK */
-	if (gpio_is_valid(GPIO_LCD_SCLK)) {
-		if (gpio_request(GPIO_LCD_SCLK, S3C_GPIO_LAVEL(GPIO_LCD_SCLK))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_SCLK!\n");
-		gpio_direction_output(GPIO_LCD_SCLK, GPIO_LEVEL_HIGH);
-	}
-	s3c_gpio_setpull(GPIO_LCD_SCLK, S3C_GPIO_PULL_NONE);
-	/* LCD_CS_N */
-	if (gpio_is_valid(GPIO_LCD_CS_N)) {
-		if (gpio_request(GPIO_LCD_CS_N, S3C_GPIO_LAVEL(GPIO_LCD_CS_N))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_CS_N!\n");
-		gpio_direction_output(GPIO_LCD_CS_N, GPIO_LEVEL_HIGH);
-	}
-	s3c_gpio_setpull(GPIO_LCD_CS_N, S3C_GPIO_PULL_NONE);
-	/* LCD_SDO */ //????? 
-	if (gpio_is_valid(GPIO_LCD_SDO)) {
-		if (gpio_request(GPIO_LCD_SDO, S3C_GPIO_LAVEL(GPIO_LCD_SDO))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_SDO!\n");
-		gpio_direction_output(GPIO_LCD_SDO, GPIO_LEVEL_HIGH);
-	}
-	s3c_gpio_setpull(GPIO_LCD_SDO, S3C_GPIO_PULL_NONE);
-	// LCD_SDI /
-	if (gpio_is_valid(GPIO_LCD_SDI)) {
-		if (gpio_request(GPIO_LCD_SDI, S3C_GPIO_LAVEL(GPIO_LCD_SDI))) 
-			printk(KERN_ERR "Failed to request GPIO_LCD_SDI!\n");
-		gpio_direction_output(GPIO_LCD_SDI, GPIO_LEVEL_HIGH);
-	}
-	s3c_gpio_setpull(GPIO_LCD_SDI, S3C_GPIO_PULL_NONE);
-}
-#endif
 static void backlight_gpio_init(void)
 {
 }
-
+#endif
 /*
  * Serial Interface
  */
@@ -272,196 +180,62 @@ static void backlight_gpio_init(void)
 #define LCD_SDI_HIGH	gpio_set_value(GPIO_LCD_SDI, GPIO_LEVEL_HIGH); //SDI
 #define LCD_SDI_LOW	    gpio_set_value(GPIO_LCD_SDI, GPIO_LEVEL_LOW);
 
-#define DEFAULT_UDELAY	5	
+#define DEFAULT_UDELAY	5
 
 
+#define AMS310fN07_SPI_DELAY_USECS	5
 
+/*
+ * Driver data
+ */
+struct ams310fn07_data {
+	struct backlight_device	*bl;
+	struct device *dev;
 
-static void spi_write(u16 reg_data)
-{	
-	s32 i;
-	u8 ID, ID2,reg_data1, reg_data2;
-	reg_data1 = (reg_data >> 8); // last byte
-	reg_data2 = reg_data; //firt byte
-	ID=0x70;
-	ID2=0x72;
-/*	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
+	unsigned cs_gpio;
+	unsigned sck_gpio;
+	unsigned sda_gpio;
+	unsigned reset_gpio;
 
-	 LCD_CS_N_HIGH
-	 udelay(DEFAULT_UDELAY);
-	
-	LCD_CS_N_LOW
-	udelay(DEFAULT_UDELAY);
+	struct regulator *vdd3;
+	struct regulator *vci;
 
-	 LCD_SCLK_HIGH
-	 udelay(DEFAULT_UDELAY);
-	
-*/
-	
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_LOW
-	udelay(DEFAULT_UDELAY);
-	 LCD_SCLK_HIGH
-	 udelay(DEFAULT_UDELAY);
+	int state;
+	int brightness;
 
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
+	struct setting_table *standby_off;
+	struct setting_table *power_on;
+	struct setting_table *power_off;
+	struct setting_table *display_on;
+	struct setting_table *display_off;
+	struct setting_table **gamma_setting_idl;
+	struct setting_table **gamma_setting_vid;
+	struct setting_table **gamma_setting_cam;
+};
 
-		if ((ID >> i) & 0x1)
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);	
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);
-	}
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
+struct ams310fn07_data *g_data;
+int lcd_power = OFF;
+EXPORT_SYMBOL(lcd_power);
 
-		if ((reg_data1 >> i) & 0x1) //only the first byte, L->R
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);	
-	}
+//void lcd_power_ctrl(s32 value);
+//EXPORT_SYMBOL(lcd_power_ctrl);
+void ams310fn07_set_power(struct ams310fn07_data *data, int power);
+EXPORT_SYMBOL(ams310fn07_set_power);
 
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_SDI_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
+int backlight_power = OFF;
+EXPORT_SYMBOL(backlight_power);
 
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_LOW
-	udelay(DEFAULT_UDELAY);
+void backlight_power_ctrl(struct ams310fn07_data *data, s32 value);
+EXPORT_SYMBOL(backlight_power_ctrl);
 
+int backlight_level = BACKLIGHT_LEVEL_DEFAULT;
+EXPORT_SYMBOL(backlight_level);
 
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
-
-		if ((ID2 >> i) & 0x1)
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);	
-	}
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
-
-		if ((reg_data2 >> i) & 0x1)
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);
-
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);	
-	}
-	
-
-/*	for (i = 15; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
-	
-		if ((reg_data >> i) & 0x1)
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);	
-	
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);	
-	}
-*/
-	
-/*	 LCD_SCLK_HIGH
-	 udelay(DEFAULT_UDELAY);
-	
-	 LCD_SDI_HIGH
-	 udelay(DEFAULT_UDELAY); 
-	
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-*/	 
-
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_SDI_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-
-}
-
-static void spi_write2(u8 reg_data)
-{	
-	s32 i;
-	u8 ID;
-	ID=0x72;
-
-	
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_LOW
-	udelay(DEFAULT_UDELAY);
-	 LCD_SCLK_HIGH
-	 udelay(DEFAULT_UDELAY);
-
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
-
-		if ((ID >> i) & 0x1)
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);	
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);
-	}
-	for (i = 7; i >= 0; i--) { 
-		LCD_SCLK_LOW
-		udelay(DEFAULT_UDELAY);
-
-		if ((reg_data >> i) & 0x1) //only the first byte, L->R
-			LCD_SDI_HIGH
-		else
-			LCD_SDI_LOW
-		udelay(DEFAULT_UDELAY);
-		LCD_SCLK_HIGH
-		udelay(DEFAULT_UDELAY);	
-	}
-
-	LCD_SCLK_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_SDI_HIGH
-	udelay(DEFAULT_UDELAY);
-	LCD_CS_N_HIGH
-	udelay(DEFAULT_UDELAY);
-
-}
-
+void backlight_level_ctrl(struct ams310fn07_data *data, s32 value);
+EXPORT_SYMBOL(backlight_level_ctrl);
 
 struct setting_table {
-	u16 reg_data;	
+	u16 reg_data;
 	s32 wait;
 };
 
@@ -1641,14 +1415,387 @@ static struct setting_table gamma_setting_table_cam[CAMMA_LEVELS][GAMMA_SETTINGS
 	},
 };
 
+#if 1
+static void spi_write1(u16 reg_data)
+{
+	s32 i;
+	u8 ID, ID2,reg_data1, reg_data2;
+	reg_data1 = (reg_data >> 8); // last byte
+	reg_data2 = reg_data; //firt byte
+	ID=0x70;
+	ID2=0x72;
+/*	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+
+	 LCD_CS_N_HIGH
+	 udelay(DEFAULT_UDELAY);
+
+	LCD_CS_N_LOW
+	udelay(DEFAULT_UDELAY);
+
+	 LCD_SCLK_HIGH
+	 udelay(DEFAULT_UDELAY);
+
+*/
+
+	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_LOW
+	udelay(DEFAULT_UDELAY);
+	 LCD_SCLK_HIGH
+	 udelay(DEFAULT_UDELAY);
+
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(DEFAULT_UDELAY);
+
+		if ((ID >> i) & 0x1)
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(DEFAULT_UDELAY);
+
+		if ((reg_data1 >> i) & 0x1) //only the first byte, L->R
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+
+	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_SDI_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+
+	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_LOW
+	udelay(DEFAULT_UDELAY);
 
 
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(DEFAULT_UDELAY);
+
+		if ((ID2 >> i) & 0x1)
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(DEFAULT_UDELAY);
+
+		if ((reg_data2 >> i) & 0x1)
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+
+
+/*	for (i = 15; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(DEFAULT_UDELAY);
+
+		if ((reg_data >> i) & 0x1)
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+*/
+
+/*	 LCD_SCLK_HIGH
+	 udelay(DEFAULT_UDELAY);
+
+	 LCD_SDI_HIGH
+	 udelay(DEFAULT_UDELAY);
+
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+*/
+
+	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_SDI_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+
+}
+
+static void spi_write2(u8 reg_data)
+{
+	s32 i;
+	u8 ID;
+	ID=0x72;
+
+
+	LCD_SCLK_HIGH
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+	LCD_CS_N_HIGH
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+	LCD_CS_N_LOW
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+	 LCD_SCLK_HIGH
+	 udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		if ((ID >> i) & 0x1)
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+		LCD_SCLK_HIGH
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+	}
+	for (i = 7; i >= 0; i--) {
+		LCD_SCLK_LOW
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		if ((reg_data >> i) & 0x1) //only the first byte, L->R
+			LCD_SDI_HIGH
+		else
+			LCD_SDI_LOW
+		udelay(DEFAULT_UDELAY);
+		LCD_SCLK_HIGH
+		udelay(DEFAULT_UDELAY);
+	}
+
+	LCD_SCLK_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_SDI_HIGH
+	udelay(DEFAULT_UDELAY);
+	LCD_CS_N_HIGH
+	udelay(DEFAULT_UDELAY);
+
+}
+#endif
+
+
+/*
+ * Hardware interface
+ */
+static inline void ams310fn07_send_word(struct ams310fn07_data *data, u16 word)
+{
+	spi_write1(word);
+	return;
+
+	u8 ID, ID2,word_hi, word_lo;
+	word_hi = (word >> 8); // last byte
+	word_lo = word; //firt byte
+	ID = 0x70;
+	ID2 = 0x72;
+
+	unsigned mask = 1 << 8;
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 0);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, ID & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	mask = 1 << 8;
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, word_hi & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sda_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 0);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	mask = 1 << 8;
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, ID2 & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	mask = 1 << 8;
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, word_lo & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sda_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+}
+
+static inline void ams310fn07_send_word2(struct ams310fn07_data *data, u8 word)
+{
+	spi_write2(word);
+	return;
+	u8 ID2;
+	ID2 = 0x72;
+
+	unsigned mask = 1 << 8;
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 0);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, ID2 & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	mask = 1 << 8;
+
+	do {
+		gpio_set_value(data->sck_gpio, 0);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sda_gpio, word & mask);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		gpio_set_value(data->sck_gpio, 1);
+		udelay(AMS310fN07_SPI_DELAY_USECS);
+
+		mask >>= 1;
+	} while (mask);
+
+	gpio_set_value(data->sck_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->sda_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+	gpio_set_value(data->cs_gpio, 1);
+	udelay(AMS310fN07_SPI_DELAY_USECS);
+
+}
+
+#if 0
 static void setting_table_write(struct setting_table *table)
 {
 //	printk("setting table write! \n");
 	spi_write(table->reg_data);
 	if(table->wait)
 		msleep(table->wait);
+}
+#endif
+
+static void ams310fn07_send_command_seq(struct ams310fn07_data *data, struct setting_table *table)
+{
+	int size = (int)(sizeof(table)/sizeof(struct setting_table));
+	int i;
+	struct setting_table *ptr;
+	ptr = table;
+	for (i = 0; i < size; i++, ptr++) {
+			ams310fn07_send_word(data, ptr->reg_data);
+			if(ptr->wait)
+				msleep(ptr->wait);
+	}
 }
 
 /*
@@ -1671,7 +1818,7 @@ typedef enum {
 
 int lcd_gamma_present = 0;
 
-void lcd_gamma_change(int gamma_status)
+void lcd_gamma_change(struct ams310fn07_data *data, int gamma_status)
 {
 	if(old_level < 1){
 		printk("OLD level <1: %d \n", old_level);
@@ -1684,20 +1831,20 @@ void lcd_gamma_change(int gamma_status)
 	if(gamma_status == LCD_IDLE)
 	{
 		lcd_gamma_present = LCD_IDLE;
-		for (i = 0; i < GAMMA_SETTINGS; i++)
-			setting_table_write(&gamma_setting_table[(old_level - 1)][i]);
+		ams310fn07_send_command_seq(data, data->gamma_setting_idl[1]);
+		//setting_table_write(&gamma_setting_table[(old_level - 1)][i]);
 	}
 	else if(gamma_status == LCD_VIDEO)
 	{
 		lcd_gamma_present = LCD_VIDEO;
-		for (i = 0; i < GAMMA_SETTINGS; i++)
-			setting_table_write(&gamma_setting_table_video[(old_level - 1)][i]);
+		ams310fn07_send_command_seq(data, data->gamma_setting_idl[1]);
+		//setting_table_write(&gamma_setting_table_video[(old_level - 1)][i]);
 	}
 	else if(gamma_status == LCD_CAMERA)
 	{
 		lcd_gamma_present = LCD_CAMERA;
-		for (i = 0; i < GAMMA_SETTINGS; i++)
-			setting_table_write(&gamma_setting_table_cam[(old_level - 1)][i]);
+		ams310fn07_send_command_seq(data, data->gamma_setting_idl[1]);
+		//setting_table_write(&gamma_setting_table_cam[(old_level - 1)][i]);
 	}
 	else
 		return;
@@ -1705,110 +1852,90 @@ void lcd_gamma_change(int gamma_status)
 
 EXPORT_SYMBOL(lcd_gamma_change);
 
-void lcd_power_ctrl(s32 value)
+/*
+ * Backlight interface
+ */
+void ams310fn07_set_power(struct ams310fn07_data *data, int power)
 {
-		s32 i;	
-		u8 data;
-//		printk(" LCD power ctrl called \n" );
-		if (value) {
-			//printk("Lcd power on sequence start\n");
-			/* Power On Sequence */
-		
-			/* Reset Asseert */
-			gpio_set_value(GPIO_LCD_RST_N, GPIO_LEVEL_LOW);
-	
-			/* Power Enable */
-/* FIXME
- 			pmic_read(MAX8698_ID, ONOFF2, &data, 1); 
- 			data |= (ONOFF2_ELDO6 | ONOFF2_ELDO7);
- 			//printk("Lcd power on writing data: %x\n", data);	
- 			pmic_write(MAX8698_ID, ONOFF2, &data, 1); 
-*/	
-//			pmic_read(max8906reg[LDOAEN].slave_addr, max8906reg[LDOAEN].addr
-//			Set_MAX8906_PM_Regulator_SW_Enable(LDO_ON, LDOAEN);
-//			Set_MAX8906_PM_REG(LDOAEN, LDO_ON);
-//			Set_MAX8906_PM_REG(LDOAEN, LDO_OFF);
-	
-			msleep(20); 
-	
-			/* Reset Deasseert */
-			gpio_set_value(GPIO_LCD_RST_N, GPIO_LEVEL_HIGH);
-	
-			msleep(20); 
-	
-			for (i = 0; i < POWER_ON_SETTINGS; i++)
-				setting_table_write(&power_on_setting_table[i]);
-			spi_write2(0xE8); // 3rd value
 
+	printk(" LCD power ctrl called \n" );
 
-			switch(lcd_gamma_present)
-			{
-				printk("[S3C LCD] %s : level dimming, lcd_gamma_present %d\n", __FUNCTION__, lcd_gamma_present);
-				spi_write(0x3944); //set gamma have to check!
+	if (data->state == power)
+		return;
 
-				case LCD_IDLE:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table[1][i]);
-					break;
-				case LCD_VIDEO:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table_video[1][i]);
-					break;
-				case LCD_CAMERA:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table_cam[1][i]);
-					break;
-				default:
-					break;
-			}
-			
-			for (i = 0; i < DISPLAY_ON_SETTINGS; i++)
-				setting_table_write(&display_on_setting_table[i]);	
-			//printk("Lcd power on sequence end\n");
+	if (power) {
+		printk("Lcd power on sequence start\n");
+		pm_runtime_get_sync(data->dev);
 
-}
-		else {
-			//printk("Lcd power off sequence start\n");	
-			/* Power Off Sequence */
-			for (i = 0; i < DISPLAY_OFF_SETTINGS; i++)
-				setting_table_write(&display_off_setting_table[i]);	
-			
-			//for (i = 0; i < POWER_OFF_SETTINGS; i++)
-			//	setting_table_write(&power_off_setting_table[i]);	
-		
-			/* Reset Assert */
-			gpio_set_value(GPIO_LCD_RST_N, GPIO_LEVEL_LOW);
+		gpio_set_value(data->reset_gpio, 0);
 
-			/* Power Disable */
-/* FIXME
- 			pmic_read(MAX8698_ID, ONOFF2, &data, 1); 
-			data &= ~(ONOFF2_ELDO6 | ONOFF2_ELDO7);
- 			pmic_write(MAX8698_ID, ONOFF2, &data, 1); 
-*/
-//			Set_MAX8906_PM_Regulator_SW_Enable(LDO_OFF, LDOAEN);
-//			Set_MAX8906_PM_REG(LDOA );
-//			Set_MAX8906_PM_REG(LDOAEN, LDO_OFF);
-//			Set_MAX8906_PM_REG(LDOAEN, LDO_ON);
+		msleep(20);
 
-			printk("Lcd power off sequence end\n");	
-			printk("XXXXXXXXXXXXXXXXXXXXXXXXXXX\n");	
+		gpio_set_value(data->reset_gpio, 1);
 
+		msleep(20);
+
+		ams310fn07_send_command_seq(data, data->power_on);
+
+		ams310fn07_send_word2(data, 0xE8);
+		//spi_write2(); // 3rd value
+
+		switch(lcd_gamma_present)
+		{
+			printk("[S3C LCD] %s : level dimming, lcd_gamma_present %d\n", __FUNCTION__, lcd_gamma_present);
+			ams310fn07_send_word(data, 0x3944);
+			//spi_write(0x3944); //set gamma have to check!
+
+			case LCD_IDLE:
+				ams310fn07_send_command_seq(data, data->gamma_setting_idl[1]);
+				//setting_table_write(&gamma_setting_table[1]);
+				break;
+			case LCD_VIDEO:
+				ams310fn07_send_command_seq(data, data->gamma_setting_vid[1]);
+				//setting_table_write(&gamma_setting_table_video[1][i]);
+				break;
+			case LCD_CAMERA:
+				ams310fn07_send_command_seq(data, data->gamma_setting_cam[1]);
+				//setting_table_write(&gamma_setting_table_cam[1][i]);
+				break;
+			default:
+				break;
 		}
-	
-		lcd_power = value;
+
+		ams310fn07_send_command_seq(data, data->display_on);
+		//setting_table_write(&display_on_setting_table[i]);
+		printk("Lcd power on sequence end\n");
+
+
+	} else {
+
+		printk("Lcd power off sequence start\n");
+		/* Power Off Sequence */
+		ams310fn07_send_command_seq(data, data->display_off);
+
+		gpio_set_value(data->reset_gpio, 0);
+
+		gpio_set_value(data->cs_gpio, 0);
+		gpio_set_value(data->sck_gpio, 0);
+
+		pm_runtime_put_sync(data->dev);
+
+		printk("Lcd power off sequence end\n");
+		printk("XXXXXXXXXXXXXXXXXXXXXXXXXXX\n");
+
 	}
 
+	data->state = power;
+}
 
-
-
-
-void backlight_ctrl(s32 value)
+static void ams310fn07_set_backlight(struct ams310fn07_data *data, s32 value)
+//void backlight_ctrl(s32 value)
 {
 	s32 i, level;
-	u8 data;
+	//u8 data;
 	int param_lcd_level = value;
 
-//	printk("backlight _ctrl is called !! \n");
+	printk("%s is called !! \n", __func__);
 
 	value &= BACKLIGHT_LEVEL_VALUE;
 
@@ -1819,37 +1946,37 @@ void backlight_ctrl(s32 value)
 		else	
 			level = (((value - 15) / 15)); 
 	if (level) {	
-//	printk(" backlight_ctrl : level:%x, old_level: %x \n", level, old_level);		
+	printk(" backlight_ctrl : level:%x, old_level: %x \n", level, old_level);
 		if (level != old_level) {
 			old_level = level;
 
 			if (lcd_power == OFF)
 			{
-				if(!s3cfb_is_clock_on())
+				//if(!s3cfb_is_clock_on())
 				{
-					s3cfb_enable_clock_power();
+				//	s3cfb_enable_clock_power();
 				}
 
-				lcd_power_ctrl(ON);
+				ams310fn07_set_power(data, ON);
 			}
 
-		//	printk("LCD Backlight level setting value ==> %d  , level ==> %d \n",value,level);
+			printk("LCD Backlight level setting value ==> %d  , level ==> %d \n",value,level);
 			
 			switch(lcd_gamma_present)
 			{
 				printk("[S3C LCD] %s : level %d, lcd_gamma_present %d\n", __FUNCTION__, (level-1), lcd_gamma_present);
 
 				case LCD_IDLE:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table[(level - 1)][i]);
+					ams310fn07_send_command_seq(data, data->gamma_setting_idl[(level-1)]);
+					//setting_table_write(&gamma_setting_table[(level - 1)][i]);
 					break;
 				case LCD_VIDEO:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table_video[(level - 1)][i]);
+					ams310fn07_send_command_seq(data, data->gamma_setting_vid[(level-1)]);
+					//setting_table_write(&gamma_setting_table_video[(level - 1)][i]);
 					break;
 				case LCD_CAMERA:
-					for (i = 0; i < GAMMA_SETTINGS; i++)
-						setting_table_write(&gamma_setting_table_cam[(level - 1)][i]);
+					ams310fn07_send_command_seq(data, data->gamma_setting_cam[(level-1)]);
+					//setting_table_write(&gamma_setting_table_cam[(level - 1)][i]);
 					break;
 				default:
 					break;
@@ -1859,97 +1986,147 @@ void backlight_ctrl(s32 value)
 	}
 	else {
 		old_level = level;
-		lcd_power_ctrl(OFF);			
+		ams310fn07_set_power(data, OFF);
 	}
 }
 
-void backlight_level_ctrl(s32 value)
+void backlight_level_ctrl(struct ams310fn07_data *data, s32 value)
 {
-//	printk("backlight level ctrl called ! \n");
+	printk("backlight level ctrl called ! \n");
 	if ((value < BACKLIGHT_LEVEL_MIN) ||	/* Invalid Value */
 		(value > BACKLIGHT_LEVEL_MAX) ||
-		(value == backlight_level))	/* Same Value */
+		(value == data->brightness))	/* Same Value */
 		return;
 
 	printk("%s %d\n", __FUNCTION__, __LINE__);
 
 	if (backlight_power)
-		backlight_ctrl(value);	
+		ams310fn07_set_backlight(data, value);
 	
-	backlight_level = value;	
+	data->brightness = value;
 }
 
-void backlight_power_ctrl(s32 value)
+void backlight_power_ctrl(struct ams310fn07_data *data, s32 value)
 {
 	if ((value < OFF) ||	/* Invalid Value */
 		(value > ON))
 		return;
 
-	backlight_ctrl((value ? backlight_level : OFF));	
+	ams310fn07_set_backlight(data, (value ? backlight_level : OFF));
 	
 	backlight_power = (value ? ON : OFF);
 }
 
-#define AMS320FS01_DEFAULT_BACKLIGHT_BRIGHTNESS		255
-
-
-
-static s32 ams320fs01_backlight_off;
-static s32 ams320fs01_backlight_brightness = AMS320FS01_DEFAULT_BACKLIGHT_BRIGHTNESS;
-static u8 ams320fs01_backlight_last_level = 33;
-static DEFINE_MUTEX(ams320fs01_backlight_lock);
-
-static void ams320fs01_set_backlight_level(u8 level)
+static int ams310fn07_bl_update_status(struct backlight_device *bl)
 {
-//	printk("ams320fs01_set_backlight_level");
+	printk("%s is called\n", __func__);
+
+	struct ams310fn07_data *data = bl_get_data(bl);
+	int new_state = 1;
+
+	if (!bl->props.brightness || bl->props.power != FB_BLANK_UNBLANK
+					|| bl->props.state & BL_CORE_FBBLANK
+					|| bl->props.state & BL_CORE_SUSPENDED)
+		new_state = 0;
+
+	data->brightness = bl->props.brightness;
+
+	ams310fn07_set_power(data, new_state);
+
+	if (new_state)
+		ams310fn07_set_backlight(data, data->brightness);
+
+	return 0;
+}
+
+static int ams310fn07_bl_get_brightness(struct backlight_device *bl)
+{
+	struct ams310fn07_data *data = bl_get_data(bl);
+
+	if (!data->state)
+		return 0;
+
+	return data->brightness;
+}
+
+static int ams310fn07_bl_check_fb(struct backlight_device *bl, struct fb_info *info)
+{
+	struct ams310fn07_data *data = bl_get_data(bl);
+
+	if (data->dev->parent == NULL)
+		return 1;
+
+	return data->dev->parent == info->device;
+}
+
+static struct backlight_ops ams310fn07_bl_ops = {
+	.options	= BL_CORE_SUSPENDRESUME,
+	.update_status	= ams310fn07_bl_update_status,
+	.get_brightness	= ams310fn07_bl_get_brightness,
+	.check_fb	= ams310fn07_bl_check_fb,
+};
+
+#if 1
+#define AMS310FN07_DEFAULT_BACKLIGHT_BRIGHTNESS		255
+
+
+
+static s32 ams310fn07_backlight_off;
+static s32 ams310fn07_backlight_brightness = AMS310FN07_DEFAULT_BACKLIGHT_BRIGHTNESS;
+static u8 ams310fn07_backlight_last_level = 33;
+static DEFINE_MUTEX(ams310fn07_backlight_lock);
+
+static void ams310fn07_set_backlight_level(struct ams310fn07_data *data, u8 level)
+{
+//	printk("ams320fn07_set_backlight_level");
 	if (backlight_level == level)
 		return;
 
-	backlight_ctrl(level);
+	ams310fn07_set_backlight(data, level);
 
 	backlight_level = level;
 }
 
-static void ams320fs01_brightness_set(struct led_classdev *led_cdev, enum led_brightness value)
+static void ams310fn07_brightness_set(struct led_classdev *led_cdev, enum led_brightness value)
 {
-	mutex_lock(&ams320fs01_backlight_lock);
-	ams320fs01_backlight_brightness = value;
-	ams320fs01_set_backlight_level(ams320fs01_backlight_brightness);
-	mutex_unlock(&ams320fs01_backlight_lock);
+	mutex_lock(&ams310fn07_backlight_lock);
+	ams310fn07_backlight_brightness = value;
+	ams310fn07_set_backlight_level(g_data, ams310fn07_backlight_brightness);
+	mutex_unlock(&ams310fn07_backlight_lock);
 }
 
-static struct led_classdev ams320fs01_backlight_led  = {
+static struct led_classdev ams310fn07_backlight_led  = {
 	.name		= "lcd-backlight",
-	.brightness = AMS320FS01_DEFAULT_BACKLIGHT_BRIGHTNESS,
-	.brightness_set = ams320fs01_brightness_set,
+	.brightness = AMS310FN07_DEFAULT_BACKLIGHT_BRIGHTNESS,
+	.brightness_set = ams310fn07_brightness_set,
 };
 
-static int ams320fs01_open (struct inode *inode, struct file *filp)
+static int ams310fn07_open (struct inode *inode, struct file *filp)
 {
-    printk(KERN_ERR "[S3C_LCD] ams320fs01_open called\n");
+    printk(KERN_ERR "[S3C_LCD] ams310fn07_open called\n");
 
     return nonseekable_open(inode, filp);
 }
 
-static int ams320fs01_release (struct inode *inode, struct file *filp)
+static int ams310fn07_release (struct inode *inode, struct file *filp)
 {
-    printk(KERN_ERR "[S3C_LCD] ams320fs01_release called\n");
+    printk(KERN_ERR "[S3C_LCD] ams310fn07_release called\n");
 
     return 0;
 }
 
-static int ams320fs01_ioctl(struct inode *inode, struct file *filp, 
+static int ams310fn07_ioctl(struct inode *inode, struct file *filp,
 	                        unsigned int ioctl_cmd,  unsigned long arg)
 {
 	int ret = 0;
 	void __user *argp = (void __user *)arg;   
 
-	if( _IOC_TYPE(ioctl_cmd) != AMS320FS01_IOC_MAGIC )
+	if( _IOC_TYPE(ioctl_cmd) != AMS310FN07_IOC_MAGIC )
 	{
 		printk("[S3C_LCD] Inappropriate ioctl 1 0x%x\n",ioctl_cmd);
 		return -ENOTTY;
 	}
-	if( _IOC_NR(ioctl_cmd) > AMS320FS01_IOC_NR_MAX )
+	if( _IOC_NR(ioctl_cmd) > AMS310FN07_IOC_NR_MAX )
 	{
 		printk("[S3C_LCD] Inappropriate ioctl 2 0x%x\n",ioctl_cmd);	
 		return -ENOTTY;
@@ -1957,21 +2134,21 @@ static int ams320fs01_ioctl(struct inode *inode, struct file *filp,
 
 	switch (ioctl_cmd)
 	{
-		case AMS320FS01_IOC_GAMMA22:
+		case AMS310FN07_IOC_GAMMA22:
 			printk(KERN_ERR "[S3C_LCD] Changing gamma to 2.2\n");
-			lcd_gamma_change(LCD_IDLE);
+			lcd_gamma_change(g_data, LCD_IDLE);
 			ret = 0;
 			break;
 
-		case AMS320FS01_IOC_GAMMA19:
+		case AMS310FN07_IOC_GAMMA19:
 			printk(KERN_ERR "[S3C_LCD] Changing gamma to 1.9\n");
-			lcd_gamma_change(LCD_VIDEO);
+			lcd_gamma_change(g_data, LCD_VIDEO);
 			ret = 0;
 			break;
 
-		case AMS320FS01_IOC_GAMMA17:
+		case AMS310FN07_IOC_GAMMA17:
 			printk(KERN_ERR "[S3C_LCD] Changing gamma to 1.7\n");
-			lcd_gamma_change(LCD_CAMERA);
+			lcd_gamma_change(g_data, LCD_CAMERA);
 			ret = 0;
 			break;
 
@@ -1985,19 +2162,186 @@ static int ams320fs01_ioctl(struct inode *inode, struct file *filp,
 }
 
 
-static struct file_operations ams320fs01_fops = {
+static struct file_operations ams310fn07_fops = {
 	.owner = THIS_MODULE,
-	.open = ams320fs01_open,
-	.release = ams320fs01_release,
-	.ioctl = ams320fs01_ioctl,
+	.open = ams310fn07_open,
+	.release = ams310fn07_release,
+	.unlocked_ioctl = ams310fn07_ioctl,
 };
 
-static struct miscdevice ams320fs01_device = {
+static struct miscdevice ams310fn07_device = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = "ams320fs01",
-	.fops = &ams320fs01_fops,
+	.name = "ams310fn07",
+	.fops = &ams310fn07_fops,
 };
+#endif
 
+/*
+ * Platform driver
+ */
+static int __devinit ams310fn07_probe(struct platform_device *pdev)
+{
+	struct ams310fn07_data *data;
+	struct ams310fn07_platform_data *pdata = pdev->dev.platform_data;
+	int ret = 0;
+
+	if (!pdata)
+		return -ENOENT;
+
+	ret = gpio_request(pdata->reset_gpio, "ams310fn07 reset");
+	if (ret)
+		return ret;
+
+	ret = gpio_direction_output(pdata->reset_gpio, 0);
+	if (ret)
+		goto err_reset;
+
+	ret = gpio_request(pdata->cs_gpio, "ams310fn07 cs");
+	if (ret)
+		goto err_reset;
+
+	ret = gpio_direction_output(pdata->cs_gpio, 0);
+	if (ret)
+		goto err_cs;
+
+	ret = gpio_request(pdata->sck_gpio, "ams310fn07 sck");
+	if (ret)
+		goto err_cs;
+
+	ret = gpio_direction_output(pdata->sck_gpio, 0);
+	if (ret)
+		goto err_sck;
+
+	ret = gpio_request(pdata->sda_gpio, "ams310fn07 sda");
+	if (ret)
+		goto err_sck;
+
+	ret = gpio_direction_output(pdata->sda_gpio, 0);
+	if (ret)
+		goto err_sda;
+
+	data = kzalloc(sizeof(struct ams310fn07_data), GFP_KERNEL);
+	if (data == NULL) {
+		dev_err(&pdev->dev, "No memory for device state\n");
+		ret = -ENOMEM;
+		goto err_sda;
+	}
+
+	g_data = data;
+
+	data->dev = &pdev->dev;
+	data->reset_gpio = pdata->reset_gpio;
+	data->cs_gpio = pdata->cs_gpio;
+	data->sck_gpio = pdata->sck_gpio;
+	data->sda_gpio = pdata->sda_gpio;
+
+	if (pdata->standby_off)
+		data->standby_off = pdata->standby_off;
+	else
+		data->standby_off = standby_off_table;
+
+	if (pdata->power_on)
+		data->power_on = pdata->power_on;
+	else
+		data->power_on = power_on_setting_table;
+
+	if (pdata->power_off)
+		data->power_off = pdata->power_off;
+	else
+		data->power_off = power_off_setting_table;
+
+	if (pdata->display_on)
+		data->display_on = pdata->display_on;
+	else
+		data->display_on = display_on_setting_table;
+
+	if (pdata->display_off)
+		data->display_off = pdata->display_off;
+	else
+		data->display_off = display_off_setting_table;
+
+	if (pdata->gamma_setting_idl)
+		data->gamma_setting_idl = pdata->gamma_setting_idl;
+	else
+		data->gamma_setting_idl = (struct setting_table **)gamma_setting_table;
+
+	if (pdata->gamma_setting_vid)
+		data->gamma_setting_vid = pdata->gamma_setting_vid;
+	else
+		data->gamma_setting_vid = (struct setting_table **)gamma_setting_table_video;
+
+	if (pdata->gamma_setting_cam)
+		data->gamma_setting_cam = pdata->gamma_setting_cam;
+	else
+		data->gamma_setting_cam = (struct setting_table **)gamma_setting_table_cam;
+
+/*	data->vci = regulator_get(&pdev->dev, "vci");
+	if (IS_ERR(data->vci)) {
+		dev_err(&pdev->dev, "Failed to get vci regulator\n");
+		ret = PTR_ERR(data->vci);
+		goto err_free;
+	}
+
+	data->vdd3 = regulator_get(&pdev->dev, "vdd3");
+	if (IS_ERR(data->vdd3)) {
+		dev_err(&pdev->dev, "Failed to get vdd3 regulator\n");
+		ret = PTR_ERR(data->vdd3);
+		goto err_vci;
+	}
+*/
+	platform_set_drvdata(pdev, data);
+
+	pm_runtime_enable(data->dev);
+	pm_runtime_no_callbacks(data->dev);
+
+	data->bl = backlight_device_register(dev_driver_string(&pdev->dev),
+			&pdev->dev, data, &ams310fn07_bl_ops, NULL);
+	if (IS_ERR(data->bl)) {
+		dev_err(&pdev->dev, "Failed to register backlight device\n");
+		ret = PTR_ERR(data->bl);
+		goto err_vdd3;
+	}
+
+	data->bl->props.max_brightness	= 255;
+	data->bl->props.brightness	= 128;
+	data->bl->props.type		= BACKLIGHT_RAW;
+	data->bl->props.power		= FB_BLANK_UNBLANK;
+	backlight_update_status(data->bl);
+
+#if 1
+	ret = misc_register(&ams310fn07_device);
+
+	if (ret) {
+		printk(KERN_ERR "[S3C_LCD] misc_register err %d\n", ret);
+		return ret;
+	}
+
+	ret = led_classdev_register(&pdev->dev, &ams310fn07_backlight_led);
+	if (ret < 0)
+		printk("%s fail\n", __func__);
+#endif
+
+	return 0;
+
+err_vdd3:
+	regulator_put(data->vdd3);
+err_vci:
+	regulator_put(data->vci);
+err_free:
+	kfree(data);
+err_sda:
+	gpio_free(pdata->sda_gpio);
+err_sck:
+	gpio_free(pdata->sck_gpio);
+err_cs:
+	gpio_free(pdata->cs_gpio);
+err_reset:
+	gpio_free(pdata->reset_gpio);
+
+	return ret;
+}
+
+#if 0
 static int ams320fs01_backlight_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2014,41 +2358,127 @@ static int ams320fs01_backlight_probe(struct platform_device *pdev)
 		printk("%s fail\n", __func__);
 	return ret;
 }
+#endif
 
-static int ams320fs01_backlight_remove(struct platform_device *pdev)
+static int __devexit ams310fn07_remove(struct platform_device *pdev)
 {
-	misc_deregister(&ams320fs01_device);
+	struct ams310fn07_data *data = platform_get_drvdata(pdev);
 
-	led_classdev_unregister(&ams320fs01_backlight_led); 
+	ams310fn07_set_power(data, 0);
+
+	backlight_device_unregister(data->bl);
+
+	gpio_free(data->reset_gpio);
+	gpio_free(data->cs_gpio);
+	gpio_free(data->sck_gpio);
+	gpio_free(data->sda_gpio);
+
+	regulator_put(data->vci);
+	regulator_put(data->vdd3);
+
+	misc_deregister(&ams310fn07_device);
+
+	led_classdev_unregister(&ams310fn07_backlight_led);
+
+	kfree(data);
 
 	return 0;
 }
 
-static struct platform_driver ams320fs01_backlight_driver = {
-	.probe		= ams320fs01_backlight_probe,
-	.remove		= ams320fs01_backlight_remove,
+static int ams310fn07_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct ams310fn07_data *data = platform_get_drvdata(pdev);
+
+	ams310fn07_set_power(data, 0);
+
+	return 0;
+}
+
+static int ams310fn07_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct ams310fn07_data *data = platform_get_drvdata(pdev);
+
+	ams310fn07_bl_update_status(data->bl);
+
+	return 0;
+}
+
+static struct dev_pm_ops ams310fn07_pm_ops = {
+	.suspend	= ams310fn07_suspend,
+	.resume		= ams310fn07_resume,
+};
+
+static void ams310fn07_shutdown(struct platform_device *pdev)
+{
+	struct ams310fn07_data *data = platform_get_drvdata(pdev);
+
+	ams310fn07_set_power(data, 0);
+}
+
+static struct platform_driver ams310fn07_driver = {
+	.driver = {
+		.name	= "ams310fn07-lcd",
+		.owner	= THIS_MODULE,
+		.pm	= &ams310fn07_pm_ops,
+	},
+	.probe		= ams310fn07_probe,
+	.remove		= ams310fn07_remove,
+	.shutdown	= ams310fn07_shutdown,
+};
+
+/*
+ * Module
+ */
+static int __init ams310fn07_init(void)
+{
+	return platform_driver_register(&ams310fn07_driver);
+}
+module_init(ams310fn07_init);
+
+static void __exit ams310fn07_exit(void)
+{
+	platform_driver_unregister(&ams310fn07_driver);
+}
+module_exit(ams310fn07_exit);
+
+#if 0
+static int ams310fn07_backlight_remove(struct platform_device *pdev)
+{
+	misc_deregister(&ams310fn07_device);
+
+	led_classdev_unregister(&ams310fn07_backlight_led);
+
+	return 0;
+}
+
+static struct platform_driver ams310fn07_backlight_driver = {
+	.probe		= ams310fn07_backlight_probe,
+	.remove		= ams310fn07_backlight_remove,
 	.driver		= {
 		.name		= "ams310fn07-lcd",
 		.owner		= THIS_MODULE,
 	},
 };
 
-static int __init ams320fs01_backlight_init(void)
+static int __init ams310fn07_backlight_init(void)
 {
 	return platform_driver_register(&ams320fs01_backlight_driver);
 }
 
-static void __exit ams320fs01_backlight_exit(void)
+static void __exit ams310fn07_backlight_exit(void)
 {
 	platform_driver_unregister(&ams320fs01_backlight_driver); 
 }
-module_init(ams320fs01_backlight_init);
-module_exit(ams320fs01_backlight_exit);
+module_init(ams310fn07_backlight_init);
+module_exit(ams310fn07_backlight_exit);
+#endif
 
-void s3cfb_init_hw(void)
+void s3cfb_init_hw(struct ams310fn07_data *data)
 {
 	printk("s3cfb_init_hw!! \n");
-	s3cfb_set_fimd_info();
+//	s3cfb_set_fimd_info();
 /*
 	s3cfb_set_gpio();
 #ifdef CONFIG_FB_S3C_LCD_INIT	
@@ -2066,122 +2496,11 @@ void s3cfb_init_hw(void)
 	
 	//backlight_gpio_init();
 	
-	lcd_power = ON;
+	data->state = ON;
 
 	//backlight_level = BACKLIGHT_LEVEL_DEFAULT;
-	backlight_level_ctrl(BACKLIGHT_LEVEL_DEFAULT);
+	backlight_level_ctrl(data, BACKLIGHT_LEVEL_DEFAULT);
 
 	backlight_power = ON;
 //#endif 
-}
-
-#define LOGO_MEM_BASE		(0x50000000 + 0x05f00000 - 0x100000)	/* SDRAM_BASE + SRAM_SIZE(208MB) - 1MB */
-#define LOGO_MEM_SIZE		(S3C_FB_HRES * S3C_FB_VRES * 2)
-
-void s3cfb_display_logo(int win_num)
-{
-/*	s3c_fb_info_t *fbi = &s3c_fb_info[0];
-	u8 *logo_virt_buf;
-	
-	logo_virt_buf = ioremap_nocache(LOGO_MEM_BASE, LOGO_MEM_SIZE);
-
-	memcpy(fbi->map_cpu_f1, logo_virt_buf, LOGO_MEM_SIZE);	
-
-	iounmap(logo_virt_buf);
-*/
-}
-/*
-#include "s3cfb_progress.h"
-
-static int progress = 0;
-
-static int progress_flag = OFF;
-
-static struct timer_list progress_timer;
-
-static void progress_timer_handler(unsigned long data)
-{
-	s3c_fb_info_t *fbi = &s3c_fb_info[1];
-	unsigned short *bar_src, *bar_dst;	
-	int	i, j, p;
-
-	// 1 * 12 R5G5B5 BMP (Aligned 4 Bytes)
-	bar_dst = (unsigned short *)(fbi->map_cpu_f1 + (((320 * 416) + 41) * 2));
-	bar_src = (unsigned short *)(progress_bar + sizeof(progress_bar) - 4);
-
-	for (i = 0; i < 12; i++) {
-		for (j = 0; j < 2; j++) {
-			p = ((320 * i) + (progress * 2) + j);
-			*(bar_dst + p) = (*(bar_src - (i * 2)) | 0x8000);
-		}
-	}	
-
-	progress++;
-
-	if (progress > 118) {
-		del_timer(&progress_timer);
-	}
-	else {
-		progress_timer.expires = (get_jiffies_64() + (HZ/15)); 
-		progress_timer.function = progress_timer_handler; 
-		add_timer(&progress_timer);
-	}
-}
-
-static unsigned int new_wincon1; 
-static unsigned int old_wincon1; 
-*/
-void s3cfb_start_progress(void)
-{
-/*
-	s3c_fb_info_t *fbi = &s3c_fb_info[1];
-	unsigned short *bg_src, *bg_dst;	
-	int	i, j, p;
-	
-	memset(fbi->map_cpu_f1, 0x00, LOGO_MEM_SIZE);	
-
-	// 320 * 25 R5G5B5 BMP 
-	bg_dst = (unsigned short *)(fbi->map_cpu_f1 + ((320 * 410) * 2));
-	bg_src = (unsigned short *)(progress_bg + sizeof(progress_bg) - 2);
-
-	for (i = 0; i < 25; i++) {
-		for (j = 0; j < 320; j++) {
-			p = ((320 * i) + j);
-			if ((*(bg_src - p) & 0x7FFF) == 0x0000)
-				*(bg_dst + p) = (*(bg_src - p) & ~0x8000);
-			else
-				*(bg_dst + p) = (*(bg_src - p) | 0x8000);
-		}
-	}	
-
-	old_wincon1 = readl(S3C_WINCON1);
-
-	new_wincon1 = S3C_WINCONx_ENLOCAL_DMA | S3C_WINCONx_BUFSEL_0 | S3C_WINCONx_BUFAUTOEN_DISABLE | \
-	           S3C_WINCONx_BITSWP_DISABLE | S3C_WINCONx_BYTSWP_DISABLE | S3C_WINCONx_HAWSWP_ENABLE | \
-	           S3C_WINCONx_BURSTLEN_16WORD | S3C_WINCONx_BLD_PIX_PIXEL | S3C_WINCONx_BPPMODE_F_16BPP_A555 | \
-	           S3C_WINCONx_ALPHA_SEL_0 | S3C_WINCONx_ENWIN_F_ENABLE,
-
-	writel(new_wincon1, S3C_WINCON1);
-
-	init_timer(&progress_timer);
-	progress_timer.expires = (get_jiffies_64() + (HZ/10)); 
-	progress_timer.function = progress_timer_handler; 
-	add_timer(&progress_timer);
-
-	progress_flag = ON;
-*/
-}
-void s3cfb_stop_progress(void)
-{
-/*
-	if (progress_flag == OFF)
-		return;
-
-	del_timer(&progress_timer);
-#ifdef CONFIG_FB_S3C_BPP_24
-	writel(s3c_fimd.wincon0,    S3C_WINCON0);
-#endif
-	writel(old_wincon1, S3C_WINCON1);	
-	progress_flag = OFF;
-*/
 }
