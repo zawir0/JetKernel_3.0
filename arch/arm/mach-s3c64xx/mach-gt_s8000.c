@@ -62,11 +62,17 @@
 #include <linux/spica_bt.h>
 #include <linux/sec_jack.h>
 #include <linux/vibetonz.h>
+#include <linux/leds-regulator.h>
+#include <linux/memory_alloc.h>
+#include <linux/memblock.h>
 
 #include <sound/gt_i5700.h>
 #include <sound/ak4671.h>
 
 #include <video/s6d05a.h>
+
+#include <media/s5k4ca_platform.h>
+#include <media/s3c_fimc.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -79,11 +85,16 @@
 #include <mach/s3c6410.h>
 #include <mach/pd.h>
 #include <mach/regs-gpio.h>
+#include <mach/regs-gpio-memport.h>
+#include <mach/regs-sys.h>
+#include <mach/regs-syscon-power.h>
+#include <mach/regs-clock.h>
 
 #include <asm/irq.h>
 #include <asm/mach-types.h>
 #include <asm/setup.h>
 
+#include <plat/regs-sdhci.h>
 #include <plat/regs-serial.h>
 #include <plat/iic.h>
 #include <plat/fb.h>
@@ -743,238 +754,37 @@ static struct i2c_board_info jet_audio_i2c_devs[] __initdata = {
 	}
 };
 
-
-
 struct platform_device sec_device_rtc = {
 	.name   = "rtc-samsungjet",
 	.id		= -1,
 };
-
-
-
-
-
 /*
- * Reserved memory (FIXME: Throw this shit away!)
+ * Memory configuration
  */
 
-#if 0
-#define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
+#define PHYS_SIZE			(208*1024*1024)
 
-#define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
-#define RESERVED_PMEM_END_ADDR 		(DRAM_END_ADDR)
+#define RAM_CONSOLE_SIZE		(1*1024*1024)
+#define PMEM_GPU1_SIZE			(32*1024*1024)
+#define PMEM_SIZE			(16*1024*1024)
 
-#define RESERVED_MEM_CMM		(SZ_2M + SZ_1M)
-#define RESERVED_MEM_MFC		(SZ_4M + SZ_2M)
-/* PMEM_PIC and MFC use share area */
-#define RESERVED_PMEM_PICTURE		(SZ_4M + SZ_2M)
-#define RESERVED_PMEM_JPEG		(SZ_2M + SZ_1M)
-#define RESERVED_PMEM_PREVIEW		(SZ_2M)
-#define RESERVED_PMEM_RENDER	  	(SZ_2M)
-#define RESERVED_PMEM_STREAM	  	(SZ_2M)
-/* G3D is shared with uppper memory areas */
-#define RAM_CONSOLE_SIZE		(SZ_2M)
-#define RESERVED_G3D			(SZ_16M + SZ_8M + SZ_4M + SZ_2M)
-#define RESERVED_PMEM_GPU1		(RESERVED_G3D)
-#define RESERVED_PMEM			(SZ_8M)
-
-#define CMM_RESERVED_MEM_START		(RESERVED_PMEM_END_ADDR \
-					- RESERVED_MEM_CMM)
-#define MFC_RESERVED_MEM_START		(CMM_RESERVED_MEM_START \
-					- RESERVED_MEM_MFC)
-#define PICTURE_RESERVED_PMEM_START	(MFC_RESERVED_MEM_START)
-#define JPEG_RESERVED_PMEM_START	(MFC_RESERVED_MEM_START \
-					- RESERVED_PMEM_JPEG)
-#define PREVIEW_RESERVED_PMEM_START	(JPEG_RESERVED_PMEM_START \
-					- RESERVED_PMEM_PREVIEW)
-#define RENDER_RESERVED_PMEM_START	(PREVIEW_RESERVED_PMEM_START \
-					- RESERVED_PMEM_RENDER)
-#define STREAM_RESERVED_PMEM_START	(RENDER_RESERVED_PMEM_START \
-					- RESERVED_PMEM_STREAM)
-/* G3D is shared with uppper memory areas */
-#define RAM_CONSOLE_START		(RESERVED_PMEM_END_ADDR \
-					- RAM_CONSOLE_SIZE)
-#define G3D_RESERVED_START		(RAM_CONSOLE_START \
-					- RESERVED_G3D)
-#define GPU1_RESERVED_PMEM_START	(G3D_RESERVED_START)
-#define RESERVED_PMEM_START		(GPU1_RESERVED_PMEM_START \
-					- RESERVED_PMEM)
-#define PHYS_UNRESERVED_SIZE		(RESERVED_PMEM_START - PHYS_OFFSET)
-
-/*
- * Android PMEM
- */
+#define RESERVED_SIZE			(RAM_CONSOLE_SIZE \
+					+ PMEM_GPU1_SIZE \
+					+ PMEM_SIZE)
 
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data pmem_pdata = {
 	.name		= "pmem",
-	.no_allocator	= 1,
+	.allocator_type	= PMEM_ALLOCATORTYPE_ALLORNOTHING,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM,
+	.size		= PMEM_SIZE,
 };
 
 static struct android_pmem_platform_data pmem_gpu1_pdata = {
 	.name		= "pmem_gpu1",
-	.no_allocator	= 0,
+	.allocator_type	= PMEM_ALLOCATORTYPE_BITMAP,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= GPU1_RESERVED_PMEM_START,
-#ifndef USE_SAMSUNG_G3D
-	.size		= RESERVED_PMEM_GPU1,
-#endif
-};
-
-static struct android_pmem_platform_data pmem_render_pdata = {
-	.name		= "pmem_render",
-	.no_allocator	= 1,
-	.cached		= 0,
-	.start		= RENDER_RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM_RENDER,
-};
-
-static struct android_pmem_platform_data pmem_stream_pdata = {
-	.name		= "pmem_stream",
-	.no_allocator	= 1,
-	.cached		= 0,
-	.start		= STREAM_RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM_STREAM,
-};
-
-static struct android_pmem_platform_data pmem_preview_pdata = {
-	.name		= "pmem_preview",
-	.no_allocator	= 1,
-	.cached		= 0,
-        .start		= PREVIEW_RESERVED_PMEM_START,
-        .size		= RESERVED_PMEM_PREVIEW,
-};
-
-static struct android_pmem_platform_data pmem_picture_pdata = {
-	.name		= "pmem_picture",
-	.no_allocator	= 1,
-	.cached		= 0,
-        .start		= PICTURE_RESERVED_PMEM_START,
-        .size		= RESERVED_PMEM_PICTURE,
-};
-
-static struct android_pmem_platform_data pmem_jpeg_pdata = {
-	.name		= "pmem_jpeg",
-	.no_allocator	= 1,
-	.cached		= 0,
-        .start		= JPEG_RESERVED_PMEM_START,
-        .size		= RESERVED_PMEM_JPEG,
-};
-
-static struct platform_device pmem_device = {
-	.name		= "android_pmem",
-	.id		= 0,
-	.dev		= { .platform_data = &pmem_pdata },
-};
- 
-static struct platform_device pmem_gpu1_device = {
-	.name		= "android_pmem",
-	.id		= 1,
-	.dev		= { .platform_data = &pmem_gpu1_pdata },
-};
-
-static struct platform_device pmem_render_device = {
-	.name		= "android_pmem",
-	.id		= 2,
-	.dev		= { .platform_data = &pmem_render_pdata },
-};
-
-static struct platform_device pmem_stream_device = {
-	.name		= "android_pmem",
-	.id		= 3,
-	.dev		= { .platform_data = &pmem_stream_pdata },
-};
-
-static struct platform_device pmem_preview_device = {
-	.name		= "android_pmem",
-	.id		= 5,
-	.dev		= { .platform_data = &pmem_preview_pdata },
-};
-
-static struct platform_device pmem_picture_device = {
-	.name		= "android_pmem",
-	.id		= 6,
-	.dev		= { .platform_data = &pmem_picture_pdata },
-};
-
-static struct platform_device pmem_jpeg_device = {
-	.name		= "android_pmem",
-	.id		= 7,
-	.dev		= { .platform_data = &pmem_jpeg_pdata },
-};
-
-static struct platform_device *pmem_devices[] = {
-	&pmem_device,
-	&pmem_gpu1_device,
-	&pmem_render_device,
-	&pmem_stream_device,
-	&pmem_preview_device,
-	&pmem_picture_device,
-	&pmem_jpeg_device,
-};
-
-static void __init spica_add_mem_devices(void)
-{
-	unsigned i;
-	for (i = 0; i < ARRAY_SIZE(pmem_devices); ++i)
-		if (pmem_devices[i]->dev.platform_data) {
-			struct android_pmem_platform_data *pmem =
-					pmem_devices[i]->dev.platform_data;
-
-			if (pmem->size)
-				platform_device_register(pmem_devices[i]);
-		}
-}
-#else
-static inline void spica_add_mem_devices(void) {}
-#endif
-
-#else
-
-
-#define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
-
-#define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
-#define RESERVED_PMEM_END_ADDR 		(DRAM_END_ADDR)
-
-#define RAM_CONSOLE_SIZE		(SZ_2M)
-#define RESERVED_PMEM_GPU1		(SZ_16M + SZ_8M + SZ_4M + SZ_2M)
-#define RESERVED_PMEM			(SZ_16M)
-
-#define RAM_CONSOLE_START		(RESERVED_PMEM_END_ADDR \
-					- RAM_CONSOLE_SIZE)
-#define GPU1_RESERVED_PMEM_START	(RAM_CONSOLE_START \
-					- RESERVED_PMEM_GPU1)
-#define RESERVED_PMEM_START		(GPU1_RESERVED_PMEM_START \
-					- RESERVED_PMEM)
-#define PHYS_UNRESERVED_SIZE		(RESERVED_PMEM_START - PHYS_OFFSET)
-
-/*
- * Android PMEM
- */
-
-#ifdef CONFIG_ANDROID_PMEM
-static struct android_pmem_platform_data pmem_pdata = {
-	.name		= "pmem",
-	.no_allocator	= 1,
-	.cached		= 1,
-	.buffered	= 1,
-	.start		= RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM,
-};
-
-static struct android_pmem_platform_data pmem_gpu1_pdata = {
-	.name		= "pmem_gpu1",
-	.no_allocator	= 0,
-	.cached		= 1,
-	.buffered	= 1,
-	.start		= GPU1_RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM_GPU1,
+	.size		= PMEM_GPU1_SIZE,
 };
 
 static struct platform_device pmem_device = {
@@ -994,7 +804,7 @@ static struct platform_device *pmem_devices[] = {
 	&pmem_gpu1_device,
 };
 
-static void __init spica_add_mem_devices(void)
+static void __init spica_add_pmem_devices(void)
 {
 	unsigned i;
 	for (i = 0; i < ARRAY_SIZE(pmem_devices); ++i)
@@ -1007,10 +817,26 @@ static void __init spica_add_mem_devices(void)
 		}
 }
 #else
-static inline void spica_add_mem_devices(void) {}
+static void __init spica_add_pmem_devices(void) {}
 #endif
 
-#endif
+static void __init spica_reserve(void)
+{
+	unsigned long start = PHYS_OFFSET + PHYS_SIZE - RESERVED_SIZE;
+	unsigned long size = RESERVED_SIZE;
+	struct mem_pool *mpool;
+	int ret;
+
+	memory_pool_init();
+
+	ret = memblock_remove(start, size);
+	WARN_ON(ret);
+
+	mpool = initialize_memory_pool(start, size, 0);
+	if (!mpool)
+		pr_warning("failed to create mempool\n");
+}
+
 
 
 /*
@@ -1057,14 +883,48 @@ static struct platform_device jet_ams310fn07 = {
  * SDHCI platform data
  */
 
+static void jet_setup_sdhci_cfg_card(struct platform_device *dev,
+				    void __iomem *r,
+				    struct mmc_ios *ios,
+				    struct mmc_card *card)
+{
+	u32 ctrl2 = 0, ctrl3 = 0;
+
+	/* don't need to alter anything acording to card-type */
+
+	writel(S3C64XX_SDHCI_CONTROL4_DRIVE_4mA, r + S3C64XX_SDHCI_CONTROL4);
+
+	ctrl2 = readl(r + S3C_SDHCI_CONTROL2);
+	ctrl2 &= S3C_SDHCI_CTRL2_SELBASECLK_MASK;
+	ctrl2 |= (S3C64XX_SDHCI_CTRL2_ENSTAASYNCCLR |
+		S3C64XX_SDHCI_CTRL2_ENCMDCNFMSK |
+		//S3C_SDHCI_CTRL2_ENFBCLKRX |
+		S3C_SDHCI_CTRL2_DFCNT_NONE |
+		S3C_SDHCI_CTRL2_ENCLKOUTHOLD);
+
+	if (ios->clock < 25 * 1000000)
+	{
+		ctrl3 = (S3C_SDHCI_CTRL3_FCSEL3 |
+			 S3C_SDHCI_CTRL3_FCSEL2 |
+			 S3C_SDHCI_CTRL3_FCSEL1 |
+			 S3C_SDHCI_CTRL3_FCSEL0);
+	}
+	else
+	{
+		ctrl3 = S3C_SDHCI_CTRL3_FCSEL0;
+	}
+	writel(ctrl2, r + S3C_SDHCI_CONTROL2);
+	writel(ctrl3, r + S3C_SDHCI_CONTROL3);
+}
+
 static struct s3c_sdhci_platdata jet_hsmmc0_pdata = {
 	.max_width		= 4,
-	.host_caps		= MMC_CAP_4_BIT_DATA |
-				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
-				MMC_CAP_DISABLE,
+	.host_caps		= MMC_CAP_4_BIT_DATA
+				| MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
 	.cd_type		= S3C_SDHCI_CD_GPIO,
 	.ext_cd_gpio		= GPIO_TF_DETECT,
 	.ext_cd_gpio_invert	= 1,
+	.cfg_card		= jet_setup_sdhci_cfg_card,
 };
 
 static struct s3c_sdhci_platdata jet_hsmmc1_pdata = {
@@ -1097,14 +957,21 @@ static int spica_wlan_cd_cleanup(void (*notify_func)(struct platform_device *,
 	return 0;
 }
 
+void jet_setup_sdhci2_cfg_gpio(struct platform_device *dev, int width)
+{
+	/* Nothing to do here */
+}
+
 static struct s3c_sdhci_platdata spica_hsmmc2_pdata = {
 	.max_width		= 4,
-	.host_caps		= MMC_CAP_4_BIT_DATA |
-				MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED |
-				MMC_CAP_DISABLE,
+	.host_caps		= MMC_CAP_4_BIT_DATA
+				| MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED,
 	.cd_type		= S3C_SDHCI_CD_EXTERNAL,
 	.ext_cd_init		= spica_wlan_cd_init,
 	.ext_cd_cleanup		= spica_wlan_cd_cleanup,
+	.built_in		= 1,
+	.cfg_card		= jet_setup_sdhci_cfg_card,
+	.cfg_gpio               = jet_setup_sdhci2_cfg_gpio,
 };
 
 static struct regulator_consumer_supply mmc2_supplies[] = {
@@ -1200,8 +1067,6 @@ static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
 
 static struct resource spica_ram_console_resources[] = {
 	{
-		.start	= RAM_CONSOLE_START,
-		.end	= RAM_CONSOLE_START + RAM_CONSOLE_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	}
 };
@@ -1254,6 +1119,7 @@ static struct samsung_keypad_platdata jet_keypad_pdata __initdata = {
 	.rows		= 3,
 	.cols		= 3,
 	.no_autorepeat	= 1,
+	.wakeup		= 1,
 };
 
 /*
@@ -1494,27 +1360,29 @@ static struct spica_battery_threshold spica_battery_volt_lut[] = {
 	{ 2635, 3864100 },
 	{ 2800, 4100000 },
 	{ 2853, 4176000 },
+	{ 3080, 4500000 },
 };
 
 static struct spica_battery_threshold spica_battery_temp_lut[] = {
 	/* ADC, 0.001*C */
-	{  324, 65000 },
-	{  364, 61000 },
-	{  388, 59000 },
-	{  439, 55000 },
-	{  511, 50000 },
-	{  593, 45000 },
-	{  684, 40000 },
-	{  804, 34000 },
-	{  845, 32000 },
-	{  886, 30000 },
-	{  994, 25000 },
-	{ 1112, 20000 },
-	{ 1224, 15000 },
-	{ 1340, 10000 },
-	{ 1450,  5000 },
-	{ 1550,     0 },
-	{ 1632, -5000 },
+	{  324,  65000 },
+	{  364,  61000 },
+	{  388,  59000 },
+	{  439,  55000 },
+	{  511,  50000 },
+	{  593,  45000 },
+	{  684,  40000 },
+	{  804,  34000 },
+	{  845,  32000 },
+	{  886,  30000 },
+	{  994,  25000 },
+	{ 1112,  20000 },
+	{ 1224,  15000 },
+	{ 1340,  10000 },
+	{ 1450,   5000 },
+	{ 1550,      0 },
+	{ 1632,  -5000 },
+	{ 2042, -30000 },
 };
 
 static void spica_charger_supply_detect_init(spica_battery_notify_func_t *func)
@@ -1603,6 +1471,22 @@ static void spica_wifi_bt_power_dec(void)
  * Bluetooth
  */
 
+static struct s3c_pin_cfg_entry jet_bt_pin_config_on[] = {
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(NONE),
+	S3C64XX_GPA4_UART1_RXD, S3C_PIN_PULL(NONE),
+	S3C64XX_GPA5_UART1_TXD, S3C_PIN_PULL(NONE),
+	S3C64XX_GPA6_UART1_CTSN, S3C_PIN_PULL(NONE),
+	S3C64XX_GPA7_UART1_RTSN, S3C_PIN_PULL(NONE),
+};
+
+static struct s3c_pin_cfg_entry jet_bt_pin_config_off[] = {
+	S3C_PIN(GPIO_WLAN_HOST_WAKE), S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPA(4)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPA(5)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPA(6)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPA(7)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+};
+
 static int spica_bt_power = 0;
 
 static void spica_bt_set_power(int val)
@@ -1616,7 +1500,11 @@ static void spica_bt_set_power(int val)
 		msleep(100);
 		gpio_set_value(GPIO_BT_RST_N, 1);
 		msleep(50);
+		s3c_pin_config(jet_bt_pin_config_on,
+					ARRAY_SIZE(jet_bt_pin_config_on));
 	} else {
+		s3c_pin_config(jet_bt_pin_config_off,
+					ARRAY_SIZE(jet_bt_pin_config_off));
 		gpio_set_value(GPIO_BT_RST_N, 0);
 		spica_wifi_bt_power_dec();
 	}
@@ -1860,7 +1748,7 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id		= S3C_VENDOR_ID,
 	.product_id		= S3C_UMS_PRODUCT_ID,
 	.manufacturer_name	= "Samsung",
-	.product_name		= "Galaxy GT-S8000",
+	.product_name		= "GT-S8000",
 	.serial_number		= device_serial,
 	.num_products		= ARRAY_SIZE(usb_products),
 	.products		= usb_products,
@@ -2169,13 +2057,6 @@ static struct resource s3c_g3d_resource[] = {
 		.flags = IORESOURCE_MEM,
 	},
 	[1] = {
-#ifdef USE_SAMSUNG_G3D
-		.start	= G3D_RESERVED_START,
-		.end	= G3D_RESERVED_START + RESERVED_G3D - 1,
-		.flags	= IORESOURCE_MEM,
-	},
-	[2] = {
-#endif
 		.start = IRQ_S3C6410_G3D,
 		.end   = IRQ_S3C6410_G3D,
 		.flags = IORESOURCE_IRQ,
@@ -2330,14 +2211,7 @@ static struct platform_device *spica_mod_devices[] __initdata = {
  */
 
 static struct map_desc spica_iodesc[] __initdata = {
-#ifdef CONFIG_ANDROID_RAM_CONSOLE_EARLY_INIT
-	{
-		.virtual	= (unsigned long)S3C_ADDR_CPU(0x00300000),
-		.pfn		= __phys_to_pfn(RAM_CONSOLE_START),
-		.length		= SZ_1M,
-		.type		= MT_DEVICE,
-	},
-#endif
+
 };
 
 /*
@@ -2754,18 +2628,57 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 static void __init spica_fixup(struct machine_desc *desc,
 		struct tag *tags, char **cmdline, struct meminfo *mi)
 {
-	mi->nr_banks = 2;
+	mi->nr_banks = 1;
 
 	mi->bank[0].start = PHYS_OFFSET;
-	mi->bank[0].size = SZ_128M;
-
-	mi->bank[1].start = PHYS_OFFSET + SZ_128M;
-	mi->bank[1].size = PHYS_UNRESERVED_SIZE - SZ_128M;
+	mi->bank[0].size = PHYS_SIZE;
 }
 
 static void __init spica_map_io(void)
 {
+#if defined(CONFIG_SPICA_AHB_166) || defined(CONFIG_SPICA_CPU_667_AHB_166)
+	u32 reg;
+#endif
 	s3c64xx_init_io(spica_iodesc, ARRAY_SIZE(spica_iodesc));
+#if defined(CONFIG_SPICA_AHB_166)
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg &= ~S3C64XX_OTHERS_SYNCMODE;
+	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	while (__raw_readl(S3C64XX_OTHERS) & S3C64XX_OTHERS_SYNCACK_MASK);
+
+	reg = __raw_readl(S3C_CLK_DIV0);
+	reg &= ~S3C6400_CLKDIV0_HCLK2_MASK;
+	reg |= 0x0 << S3C6400_CLKDIV0_HCLK2_SHIFT;
+	__raw_writel(reg, S3C_CLK_DIV0);
+
+	__raw_writel(0xc14d0302, S3C_MPLL_CON);
+#elif defined(CONFIG_SPICA_CPU_667_AHB_166)
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg &= ~S3C64XX_OTHERS_SYNCMODE;
+	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	while (__raw_readl(S3C64XX_OTHERS) & S3C64XX_OTHERS_SYNCACK_MASK);
+
+	__raw_writel(0xc14d0301, S3C_APLL_CON);
+
+	reg = __raw_readl(S3C_CLK_DIV0);
+	reg &= ~S3C6400_CLKDIV0_HCLK2_MASK;
+	reg |= 0x1 << S3C6400_CLKDIV0_HCLK2_SHIFT;
+	__raw_writel(reg, S3C_CLK_DIV0);
+
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg |= S3C64XX_OTHERS_SYNCMODE;
+	reg |= S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	do {
+		reg = __raw_readl(S3C64XX_OTHERS);
+		reg &= S3C64XX_OTHERS_SYNCACK_MASK;
+	} while (reg != S3C64XX_OTHERS_SYNCACK_MASK);
+#endif
 	s3c24xx_init_clocks(12000000);
 	s3c24xx_init_uarts(spica_uartcfgs, ARRAY_SIZE(spica_uartcfgs)-1);
 }
@@ -2779,31 +2692,51 @@ static void spica_poweroff(void)
 
 static void __init spica_machine_init(void)
 {
-	struct clk *uclk1;
-	struct clk *dout_mpll;
+	struct clk *parent;
+	struct clk *clk;
+	unsigned long rate;
 
-	/* Setup DOUT MPLL frequency */
-	dout_mpll = clk_get(NULL, "dout_mpll");
-	clk_set_rate(dout_mpll, 133000000);
+	/* Setup frequencies of some clocks */
+	clk = clk_get(NULL, "hclk");
+	rate = clk_get_rate(clk);
+	clk_put(clk);
 
-	/* Setup UCLK1 frequency */
-	uclk1 = clk_get(NULL, "uclk1");
-	clk_set_parent(uclk1, dout_mpll);
-	clk_set_rate(uclk1, 133000000);
+	parent = clk_get(NULL, "dout_mpll");
+	clk = clk_get(NULL, "uclk1");
+	clk_set_rate(parent, rate);
+	clk_set_parent(clk, parent);
+	clk_set_rate(clk, rate);
+	clk_put(clk);
+	clk_put(parent);
 
-	/* Put the clocks */
-	clk_put(uclk1);
-	clk_put(dout_mpll);
+	clk = clk_get(NULL, "mfc_sclk");
+	clk_set_rate(clk, rate);
+	clk_put(clk);
+
+	/* Misc tweaks */
+	__raw_writel(0x7702, S3C64XX_QOS_OVERRIDE1);
+	__raw_writel(0x3ffff, S3C64XX_MISC_CON);
 
 	/* Setup interrupt filtering */
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON0);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON1);
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON2);
 	__raw_writel(0x00008888, S3C64XX_EINT0FLTCON3);
+	__raw_writel(0x00848484, S3C64XX_EINT12FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT34FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT56FLTCON);
+	__raw_writel(0x84848484, S3C64XX_EINT78FLTCON);
+	__raw_writel(0x00000084, S3C64XX_EINT9FLTCON);
+
+	/* Setup sleep mode settings */
+	__raw_writel(0x1020, S3C64XX_SPCONSLP);
+	__raw_writel(0x00005000, S3C64XX_MEM0CONSLP0);
+	__raw_writel(0x01041595, S3C64XX_MEM0CONSLP1);
+	__raw_writel(0x10055000, S3C64XX_MEM1CONSLP);
+	__raw_writel(__raw_readl(S3C64XX_SLEEP_CFG) & ~0x61, S3C64XX_SLEEP_CFG);
 
 	/* Configure GPIO pins */
 	s3c_pin_config(spica_pin_config, ARRAY_SIZE(spica_pin_config));
-
 	s3c_pin_slp_config(spica_slp_config, ARRAY_SIZE(spica_slp_config));
 
 	/* Setup Bluetooth and WLAN */
@@ -2816,7 +2749,6 @@ static void __init spica_machine_init(void)
 	/* Setup power management */
 	gpio_request(GPIO_PDA_PS_HOLD, "Power hold");
 	pm_power_off = spica_poweroff;
-
 	s3c_pm_init();
 
 	/* Register I2C devices */
@@ -2862,13 +2794,19 @@ static void __init spica_machine_init(void)
 
 	/* Wakelock for WLAN sleep workaround */
 	wake_lock_init(&wlan_wakelock, WAKE_LOCK_SUSPEND, "wlan");
+	/* Setup RAM console */
+	spica_ram_console_resources[0].start =
+		allocate_contiguous_memory_nomap(RAM_CONSOLE_SIZE,
+								0, PAGE_SIZE);
+	spica_ram_console_resources[0].end = RAM_CONSOLE_SIZE +
+				spica_ram_console_resources[0].start - 1;
 
 	/* Register platform devices */
 	platform_add_devices(spica_devices, ARRAY_SIZE(spica_devices));
 	platform_add_devices(spica_mod_devices, ARRAY_SIZE(spica_mod_devices));
 
 	/* Register PMEM devices */
-	spica_add_mem_devices();
+	spica_add_pmem_devices();
 
 	/* Indicate full regulator constraints */
 	regulator_has_full_constraints();
@@ -2876,7 +2814,6 @@ static void __init spica_machine_init(void)
 	/* For telephony modules */
 	sec_class = class_create(THIS_MODULE, "sec");
 	WARN_ON(IS_ERR(sec_class));
-
 }
 
 /*
@@ -2889,6 +2826,7 @@ MACHINE_START(GT_I5700, "Jet")
 	.init_irq	= s3c6410_init_irq,
 	.fixup		= spica_fixup,
 	.map_io		= spica_map_io,
+	.reserve	= spica_reserve,
 	.init_machine	= spica_machine_init,
 	.timer		= &s3c64xx_timer,
 MACHINE_END
