@@ -560,6 +560,16 @@ config PMIC_MAX8906
 	  This provides Applocations and Baseband Processor Power Management,
 	  ADC/TSC, RTC, and Audio Subsystem for Mobile Applications.
 
+config S3C_G2D
+tristate "Samsung FIMG-2D graphics engine driver"
+depends on CPU_S3C6410
+default n
+
+config S3C_G3D
+tristate "Samsung FIMG-3DSE kernel interface for OpenFIMG"
+depends on CPU_S3C6410
+default n
+
 config ACCEL                                                              
 	bool "Accelerometer Sensor"
 	default y

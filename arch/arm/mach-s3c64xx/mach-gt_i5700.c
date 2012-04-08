@@ -44,6 +44,7 @@
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/bml.h>
 #include <linux/power/spica_battery.h>
+#include <linux/platform_data/spica_dpram.h>
 #include <linux/input/qt5480_ts.h>
 #include <linux/wlan_plat.h>
 #include <linux/akm8973.h>
@@ -52,11 +53,16 @@
 #include <linux/sec_jack.h>
 #include <linux/vibetonz.h>
 #include <linux/leds-regulator.h>
+#include <linux/memory_alloc.h>
+#include <linux/memblock.h>
 
 #include <sound/gt_i5700.h>
 #include <sound/ak4671.h>
 
 #include <video/s6d05a.h>
+
+#include <media/s5k4ca_platform.h>
+#include <media/s3c_fimc.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -322,7 +328,7 @@ static struct i2c_board_info spica_misc_i2c_devs[] __initdata = {
 	}
 };
 
-/* I2C 1 (hardware) -	UNKNOWN (camera sensor) */
+/* I2C 1 (hardware) -	S5K4CA (camera sensor) */
 static struct s3c2410_platform_i2c spica_cam_i2c __initdata = {
 	.flags		= 0,
 	.slave_addr	= 0x10,
@@ -331,8 +337,73 @@ static struct s3c2410_platform_i2c spica_cam_i2c __initdata = {
 	.bus_num	= 1,
 };
 
-static struct i2c_board_info spica_cam_i2c_devs[] __initdata = {
-	/* TODO */
+static struct s3c_pin_cfg_entry spica_cam_pin_config_on[] = {
+	S3C6410_GPB2_I2C1_SCL, S3C_PIN_PULL(NONE),
+	S3C6410_GPB3_I2C1_SDA, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF0_CAMIF_CLK, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF1_CAMIF_HREF, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF2_CAMIF_PCLK, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF4_CAMIF_VSYNC, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF5_CAMIF_YDATA0, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF6_CAMIF_YDATA1, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF7_CAMIF_YDATA2, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF8_CAMIF_YDATA3, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF9_CAMIF_YDATA4, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF10_CAMIF_YDATA5, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF11_CAMIF_YDATA6, S3C_PIN_PULL(NONE),
+        S3C64XX_GPF12_CAMIF_YDATA7, S3C_PIN_PULL(NONE),
+};
+
+static struct s3c_pin_cfg_entry spica_cam_pin_config_off[] = {
+        S3C64XX_PIN(GPF(0)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(1)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(2)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(4)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(5)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(6)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(7)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(8)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(9)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(10)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(11)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+        S3C64XX_PIN(GPF(12)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPB(2)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPB(3)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+};
+
+static void spica_s5k4ca_set_power(int on)
+{
+	if (on) {
+		gpio_set_value(GPIO_CAM_3M_STBY_N, 1);
+		msleep(1);
+		gpio_set_value(GPIO_CAM_EN, 1);
+		msleep(1);
+		gpio_set_value(GPIO_MCAM_RST_N, 1);
+		msleep(40);
+		s3c_pin_config(spica_cam_pin_config_on,
+					ARRAY_SIZE(spica_cam_pin_config_on));
+	} else {
+		s3c_pin_config(spica_cam_pin_config_off,
+					ARRAY_SIZE(spica_cam_pin_config_off));
+		gpio_set_value(GPIO_MCAM_RST_N, 0);
+		gpio_set_value(GPIO_CAM_EN, 0);
+		gpio_set_value(GPIO_CAM_3M_STBY_N, 0);
+	}
+}
+
+static struct s5k4ca_platform_data spica_s5k4ca_pdata = {
+	.default_width	= 640,
+	.default_height	= 480,
+	.freq		= 24000000,
+	.set_power	= spica_s5k4ca_set_power,
+};
+
+static struct i2c_board_info spica_cam_i2c_devs[] = {
+	{
+		.type		= "s5k4ca",
+		.addr		= 0x3c,
+		.platform_data	= &spica_s5k4ca_pdata,
+	}
 };
 
 /* I2C 2 (GPIO) -	MAX8698EWO-T (voltage regulator) */
@@ -647,47 +718,32 @@ static struct i2c_board_info spica_touch_i2c_devs[] __initdata = {
 };
 
 /*
- * Reserved memory (FIXME: Throw this shit away!)
+ * Memory configuration
  */
 
-#define	PHYS_SIZE			(SZ_128M + SZ_64M + SZ_16M)
+#define PHYS_SIZE			(208*1024*1024)
 
-#define DRAM_END_ADDR 			(PHYS_OFFSET + PHYS_SIZE)
-#define RESERVED_PMEM_END_ADDR 		(DRAM_END_ADDR)
+#define RAM_CONSOLE_SIZE		(1*1024*1024)
+#define PMEM_GPU1_SIZE			(32*1024*1024)
+#define PMEM_SIZE			(8*1024*1024)
 
-#define RAM_CONSOLE_SIZE		(SZ_2M)
-#define RESERVED_PMEM_GPU1		(SZ_16M + SZ_8M + SZ_4M + SZ_2M)
-#define RESERVED_PMEM			(SZ_8M)
-
-#define RAM_CONSOLE_START		(RESERVED_PMEM_END_ADDR \
-					- RAM_CONSOLE_SIZE)
-#define GPU1_RESERVED_PMEM_START	(RAM_CONSOLE_START \
-					- RESERVED_PMEM_GPU1)
-#define RESERVED_PMEM_START		(GPU1_RESERVED_PMEM_START \
-					- RESERVED_PMEM)
-#define PHYS_UNRESERVED_SIZE		(RESERVED_PMEM_START - PHYS_OFFSET)
-
-/*
- * Android PMEM
- */
+#define RESERVED_SIZE			(RAM_CONSOLE_SIZE \
+					+ PMEM_GPU1_SIZE \
+					+ PMEM_SIZE)
 
 #ifdef CONFIG_ANDROID_PMEM
 static struct android_pmem_platform_data pmem_pdata = {
 	.name		= "pmem",
-	.no_allocator	= 1,
+	.allocator_type	= PMEM_ALLOCATORTYPE_ALLORNOTHING,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM,
+	.size		= PMEM_SIZE,
 };
 
 static struct android_pmem_platform_data pmem_gpu1_pdata = {
 	.name		= "pmem_gpu1",
-	.no_allocator	= 0,
+	.allocator_type	= PMEM_ALLOCATORTYPE_BITMAP,
 	.cached		= 1,
-	.buffered	= 1,
-	.start		= GPU1_RESERVED_PMEM_START,
-	.size		= RESERVED_PMEM_GPU1,
+	.size		= PMEM_GPU1_SIZE,
 };
 
 static struct platform_device pmem_device = {
@@ -707,7 +763,7 @@ static struct platform_device *pmem_devices[] = {
 	&pmem_gpu1_device,
 };
 
-static void __init spica_add_mem_devices(void)
+static void __init spica_add_pmem_devices(void)
 {
 	unsigned i;
 	for (i = 0; i < ARRAY_SIZE(pmem_devices); ++i)
@@ -720,8 +776,72 @@ static void __init spica_add_mem_devices(void)
 		}
 }
 #else
-static inline void spica_add_mem_devices(void) {}
+static void __init spica_add_pmem_devices(void) {}
 #endif
+
+static void __init spica_reserve(void)
+{
+	unsigned long start = PHYS_OFFSET + PHYS_SIZE - RESERVED_SIZE;
+	unsigned long size = RESERVED_SIZE;
+	struct mem_pool *mpool;
+	int ret;
+
+	memory_pool_init();
+
+	ret = memblock_remove(start, size);
+	WARN_ON(ret);
+
+	mpool = initialize_memory_pool(start, size, 0);
+	if (!mpool)
+		pr_warning("failed to create mempool\n");
+}
+
+/*
+ * Camera interface
+ */
+
+static struct resource s3c_fimc_resource[] = {
+	[0] = {
+		.start = S3C64XX_PA_CAMIF,
+		.end   = S3C64XX_PA_CAMIF + SZ_4M - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = IRQ_CAMIF_C,
+		.end   = IRQ_CAMIF_C,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct s3c_fimc_isp_info spica_fimc_isp_infos[] = {
+	{
+		.board_info	= spica_cam_i2c_devs,
+		.clk_frequency	= 24000000,
+		.bus_type	= FIMC_ITU_601,
+		.i2c_bus_num	= 1,
+		.flags		= FIMC_CLK_INV_VSYNC,
+	}
+};
+
+static struct s3c_platform_fimc spica_fimc_pdata = {
+	.isp_info	= spica_fimc_isp_infos,
+	.num_clients	= ARRAY_SIZE(spica_fimc_isp_infos),
+};
+
+static u64 spica_fimc_dma_mask = DMA_BIT_MASK(32);
+
+static struct platform_device spica_fimc_device = {
+	.name		= "s3c64xx-fimc",
+	.id		= 0,
+	.resource	= s3c_fimc_resource,
+	.num_resources	= ARRAY_SIZE(s3c_fimc_resource),
+	.dev	= {
+		.platform_data	= &spica_fimc_pdata,
+		.parent		= &s3c64xx_device_pd[S3C64XX_DOMAIN_I].dev,
+		.dma_mask		= &spica_fimc_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
+};
 
 /*
  * LCD screen
@@ -922,8 +1042,6 @@ static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
 
 static struct resource spica_ram_console_resources[] = {
 	{
-		.start	= RAM_CONSOLE_START,
-		.end	= RAM_CONSOLE_START + SZ_1M - 1,
 		.flags	= IORESOURCE_MEM,
 	}
 };
@@ -1648,17 +1766,6 @@ static struct resource spica_dpram_resources[] = {
 	}
 };
 
-struct dpram_platform_data {
-	unsigned int gpio_phone_on;
-	unsigned int gpio_phone_rst_n;
-	unsigned int gpio_phone_active;
-	unsigned int gpio_cp_boot_sel;
-	unsigned int gpio_usim_boot;
-	unsigned int gpio_pda_active;
-	unsigned int gpio_onedram_int_n;
-	unsigned int gpio_sim_detect_n;
-};
-
 static struct dpram_platform_data spica_dpram_pdata = {
 	.gpio_phone_on		= GPIO_PHONE_ON,
 	.gpio_phone_rst_n	= GPIO_PHONE_RST_N,
@@ -1671,7 +1778,7 @@ static struct dpram_platform_data spica_dpram_pdata = {
 };
 
 static struct platform_device spica_dpram_device = {
-	.name		= "samsung-dpram",
+	.name		= "spica-dpram",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(spica_dpram_resources),
 	.resource	= spica_dpram_resources,
@@ -1878,6 +1985,7 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_audio_device,
 	&spica_bml_device,
 	&spica_led,
+	&spica_fimc_device,
 };
 
 /*
@@ -2045,14 +2153,7 @@ static struct platform_device *spica_mod_devices[] __initdata = {
  */
 
 static struct map_desc spica_iodesc[] __initdata = {
-#ifdef CONFIG_ANDROID_RAM_CONSOLE_EARLY_INIT
-	{
-		.virtual	= (unsigned long)S3C_ADDR_CPU(0x00300000),
-		.pfn		= __phys_to_pfn(RAM_CONSOLE_START),
-		.length		= SZ_1M,
-		.type		= MT_DEVICE,
-	},
-#endif
+
 };
 
 /*
@@ -2075,8 +2176,8 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPB1_UART2_TXD, S3C_PIN_PULL(NONE),
 
 	/* I2C 1 */
-	S3C6410_GPB2_I2C1_SCL, S3C_PIN_PULL(UP),
-	S3C6410_GPB3_I2C1_SDA, S3C_PIN_PULL(UP),
+	S3C64XX_PIN(GPB(2)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPB(3)), S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 
 	/* I2C 0 */
 	S3C6410_GPB5_I2C0_SCL, S3C_PIN_PULL(NONE),
@@ -2097,18 +2198,18 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPD4_I2S0_DO, S3C_PIN_PULL(UP),
 
 	/* CAMIF */
-	S3C64XX_GPF0_CAMIF_CLK, S3C_PIN_PULL(NONE),
-	S3C64XX_GPF1_CAMIF_HREF, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF2_CAMIF_PCLK, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF4_CAMIF_VSYNC, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF5_CAMIF_YDATA0, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF6_CAMIF_YDATA1, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF7_CAMIF_YDATA2, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF8_CAMIF_YDATA3, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF9_CAMIF_YDATA4, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF10_CAMIF_YDATA5, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF11_CAMIF_YDATA6, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPF12_CAMIF_YDATA7, S3C_PIN_PULL(DOWN),
+	S3C64XX_PIN(GPF(0)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* CLK */
+	S3C64XX_PIN(GPF(1)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* HREF */
+	S3C64XX_PIN(GPF(2)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* PCLK */
+	S3C64XX_PIN(GPF(4)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* VSYNC */
+	S3C64XX_PIN(GPF(5)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D0 */
+	S3C64XX_PIN(GPF(6)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D1 */
+	S3C64XX_PIN(GPF(7)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D2 */
+	S3C64XX_PIN(GPF(8)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D3 */
+	S3C64XX_PIN(GPF(9)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D4 */
+	S3C64XX_PIN(GPF(10)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D5 */
+	S3C64XX_PIN(GPF(11)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D6 */
+	S3C64XX_PIN(GPF(12)), S3C_PIN_IN, S3C_PIN_PULL(DOWN), /* D7 */
 
 	/* PWM */
 	S3C64XX_GPF15_PWM_TOUT1, S3C_PIN_PULL(NONE),
@@ -2388,22 +2489,19 @@ static struct s3c_pin_cfg_entry spica_slp_config[] __initdata = {
 static void __init spica_fixup(struct machine_desc *desc,
 		struct tag *tags, char **cmdline, struct meminfo *mi)
 {
-	mi->nr_banks = 2;
+	mi->nr_banks = 1;
 
 	mi->bank[0].start = PHYS_OFFSET;
-	mi->bank[0].size = SZ_128M;
-
-	mi->bank[1].start = PHYS_OFFSET + SZ_128M;
-	mi->bank[1].size = PHYS_UNRESERVED_SIZE - SZ_128M;
+	mi->bank[0].size = PHYS_SIZE;
 }
 
 static void __init spica_map_io(void)
 {
-#ifdef CONFIG_SPICA_AHB_166
+#if defined(CONFIG_SPICA_AHB_166) || defined(CONFIG_SPICA_CPU_667_AHB_166)
 	u32 reg;
 #endif
 	s3c64xx_init_io(spica_iodesc, ARRAY_SIZE(spica_iodesc));
-#ifdef CONFIG_SPICA_AHB_166
+#if defined(CONFIG_SPICA_AHB_166)
 	reg = __raw_readl(S3C64XX_OTHERS);
 	reg &= ~S3C64XX_OTHERS_SYNCMODE;
 	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
@@ -2417,6 +2515,30 @@ static void __init spica_map_io(void)
 	__raw_writel(reg, S3C_CLK_DIV0);
 
 	__raw_writel(0xc14d0302, S3C_MPLL_CON);
+#elif defined(CONFIG_SPICA_CPU_667_AHB_166)
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg &= ~S3C64XX_OTHERS_SYNCMODE;
+	reg &= ~S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	while (__raw_readl(S3C64XX_OTHERS) & S3C64XX_OTHERS_SYNCACK_MASK);
+
+	__raw_writel(0xc14d0301, S3C_APLL_CON);
+
+	reg = __raw_readl(S3C_CLK_DIV0);
+	reg &= ~S3C6400_CLKDIV0_HCLK2_MASK;
+	reg |= 0x1 << S3C6400_CLKDIV0_HCLK2_SHIFT;
+	__raw_writel(reg, S3C_CLK_DIV0);
+
+	reg = __raw_readl(S3C64XX_OTHERS);
+	reg |= S3C64XX_OTHERS_SYNCMODE;
+	reg |= S3C64XX_OTHERS_SYNCMUXSEL;
+	__raw_writel(reg, S3C64XX_OTHERS);
+
+	do {
+		reg = __raw_readl(S3C64XX_OTHERS);
+		reg &= S3C64XX_OTHERS_SYNCACK_MASK;
+	} while (reg != S3C64XX_OTHERS_SYNCACK_MASK);
 #endif
 	s3c24xx_init_clocks(12000000);
 	s3c24xx_init_uarts(spica_uartcfgs, ARRAY_SIZE(spica_uartcfgs));
@@ -2429,34 +2551,32 @@ static void spica_poweroff(void)
 	while(1);
 }
 
-#ifdef CONFIG_SPICA_AHB_166
-#define AHB_CLOCK	166500000
-#else
-#define AHB_CLOCK	133000000
-#endif
-
 static void __init spica_machine_init(void)
 {
-	struct clk *uclk1;
-	struct clk *dout_mpll;
-	struct clk *mfc_sclk;
+	struct clk *parent;
+	struct clk *clk;
+	unsigned long rate;
 
-	/* Setup DOUT MPLL frequency */
-	dout_mpll = clk_get(NULL, "dout_mpll");
-	clk_set_rate(dout_mpll, AHB_CLOCK);
+	/* Setup frequencies of some clocks */
+	clk = clk_get(NULL, "hclk");
+	rate = clk_get_rate(clk);
+	clk_put(clk);
 
-	mfc_sclk = clk_get(NULL, "mfc_sclk");
-	clk_set_rate(mfc_sclk, AHB_CLOCK);
-	clk_put(mfc_sclk);
+	parent = clk_get(NULL, "dout_mpll");
+	clk = clk_get(NULL, "uclk1");
+	clk_set_rate(parent, rate);
+	clk_set_parent(clk, parent);
+	clk_set_rate(clk, rate);
+	clk_put(clk);
+	clk_put(parent);
 
-	/* Setup UCLK1 frequency */
-	uclk1 = clk_get(NULL, "uclk1");
-	clk_set_parent(uclk1, dout_mpll);
-	clk_set_rate(uclk1, AHB_CLOCK);
+	clk = clk_get(NULL, "mfc_sclk");
+	clk_set_rate(clk, rate);
+	clk_put(clk);
 
-	/* Put the clocks */
-	clk_put(uclk1);
-	clk_put(dout_mpll);
+	/* Misc tweaks */
+	__raw_writel(0x7702, S3C64XX_QOS_OVERRIDE1);
+	__raw_writel(0x3ffff, S3C64XX_MISC_CON);
 
 	/* Setup interrupt filtering */
 	__raw_writel(0x88888888, S3C64XX_EINT0FLTCON0);
@@ -2497,8 +2617,6 @@ static void __init spica_machine_init(void)
 	i2c_register_board_info(spica_misc_i2c.bus_num, spica_misc_i2c_devs,
 					ARRAY_SIZE(spica_misc_i2c_devs));
 	s3c_i2c1_set_platdata(&spica_cam_i2c);
-	i2c_register_board_info(spica_cam_i2c.bus_num, spica_cam_i2c_devs,
-					ARRAY_SIZE(spica_cam_i2c_devs));
 	i2c_register_board_info(spica_pmic_i2c.id, spica_pmic_i2c_devs,
 					ARRAY_SIZE(spica_pmic_i2c_devs));
 	i2c_register_board_info(spica_audio_i2c.id, spica_audio_i2c_devs,
@@ -2529,12 +2647,19 @@ static void __init spica_machine_init(void)
 	samsung_pd_set_persistent(&s3c64xx_device_pd[S3C64XX_DOMAIN_F]);
 	s3c64xx_add_pd_devices();
 
+	/* Setup RAM console */
+	spica_ram_console_resources[0].start =
+		allocate_contiguous_memory_nomap(RAM_CONSOLE_SIZE,
+								0, PAGE_SIZE);
+	spica_ram_console_resources[0].end = RAM_CONSOLE_SIZE +
+				spica_ram_console_resources[0].start - 1;
+
 	/* Register platform devices */
 	platform_add_devices(spica_devices, ARRAY_SIZE(spica_devices));
 	platform_add_devices(spica_mod_devices, ARRAY_SIZE(spica_mod_devices));
 
 	/* Register PMEM devices */
-	spica_add_mem_devices();
+	spica_add_pmem_devices();
 
 	/* Indicate full regulator constraints */
 	regulator_has_full_constraints();
@@ -2554,6 +2679,7 @@ MACHINE_START(GT_I5700, "Spica")
 	.init_irq	= s3c6410_init_irq,
 	.fixup		= spica_fixup,
 	.map_io		= spica_map_io,
+	.reserve	= spica_reserve,
 	.init_machine	= spica_machine_init,
 	.timer		= &s3c64xx_timer,
 MACHINE_END

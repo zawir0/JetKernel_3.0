@@ -29,9 +29,10 @@
 /*
  * S3C_G3D_LOCK
  * Claim the hardware for exclusive access.
- * Returns:	> 0, when context restoring is needed,
- * 		  0, if not,
- * 		< 0, on error
+ * Returns:	0 - if state was preserved
+ * 		1 - if state was lost,
+ * 		2 - like 1 but caches have to be flushed and invalidated,
+ * 		negative on error
  */
 #define S3C_G3D_LOCK			_IO(G3D_IOCTL_MAGIC, 0)
 /*

@@ -132,7 +132,6 @@ static inline void s6d05a_send_word(struct s6d05a_data *data, u16 word)
 {
 	unsigned mask = 1 << 8;
 
-	gpio_set_value(data->sck_gpio, 1);
 	udelay(S6D05A_SPI_DELAY_USECS);
 
 	gpio_set_value(data->cs_gpio, 0);
@@ -153,8 +152,6 @@ static inline void s6d05a_send_word(struct s6d05a_data *data, u16 word)
 
 	gpio_set_value(data->cs_gpio, 1);
 	udelay(S6D05A_SPI_DELAY_USECS);
-
-	gpio_set_value(data->sck_gpio, 0);
 }
 
 static void s6d05a_send_command_seq(struct s6d05a_data *data, const u16 *cmd)
@@ -186,18 +183,16 @@ static void s6d05a_set_power(struct s6d05a_data *data, int power)
 		pm_runtime_get_sync(data->dev);
 
 		gpio_set_value(data->cs_gpio, 1);
-
-		gpio_set_value(data->reset_gpio, 0);
+		gpio_set_value(data->sck_gpio, 1);
 		udelay(15);
 
 		regulator_enable(data->vdd3);
 		udelay(15);
 
 		regulator_enable(data->vci);
-		udelay(15);
+		msleep(3);
 
 		gpio_set_value(data->reset_gpio, 1);
-
 		msleep(10);
 
 		s6d05a_send_command_seq(data, data->power_on_seq);
@@ -414,31 +409,6 @@ static int __devexit s6d05a_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int s6d05a_suspend(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct s6d05a_data *data = platform_get_drvdata(pdev);
-
-	s6d05a_set_power(data, 0);
-
-	return 0;
-}
-
-static int s6d05a_resume(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct s6d05a_data *data = platform_get_drvdata(pdev);
-
-	s6d05a_bl_update_status(data->bl);
-
-	return 0;
-}
-
-static struct dev_pm_ops s6d05a_pm_ops = {
-	.suspend	= s6d05a_suspend,
-	.resume		= s6d05a_resume,
-};
-
 static void s6d05a_shutdown(struct platform_device *pdev)
 {
 	struct s6d05a_data *data = platform_get_drvdata(pdev);
@@ -450,7 +420,6 @@ static struct platform_driver s6d05a_driver = {
 	.driver = {
 		.name	= "s6d05a-lcd",
 		.owner	= THIS_MODULE,
-		.pm	= &s6d05a_pm_ops,
 	},
 	.probe		= s6d05a_probe,
 	.remove		= s6d05a_remove,

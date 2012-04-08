@@ -70,7 +70,7 @@ enum
 
 /*
  * S3C_G2D_SET_RASTER_OP
- * Set requested raster operation. 
+ * Set requested raster operation.
  * Argument:	an 8-bit value defining the operation
  */
 #define S3C_G2D_SET_RASTER_OP		_IO(G2D_IOCTL_MAGIC, 3)

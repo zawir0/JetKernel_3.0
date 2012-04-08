@@ -41,7 +41,7 @@
 #include <linux/android_pmem.h>
 #endif
 
-#include "s3c_g2d.h"
+#include <linux/s3c_g2d.h>
 
 /*
  * Registers

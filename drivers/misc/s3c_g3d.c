@@ -36,7 +36,7 @@
 #include <linux/workqueue.h>
 #include <linux/pm_runtime.h>
 
-#include "s3c_g3d.h"
+#include <linux/s3c_g3d.h>
 
 /*
  * Various definitions
@@ -49,7 +49,6 @@
  */
 #define G3D_FGGB_PIPESTAT_REG		(0x00)
 #define G3D_FGGB_PIPESTAT_MSK		(0x0005171f)
-#define G3D_FGGB_PIPESTAT_USER_MSK	(0x0001171f)
 
 #define G3D_FGGB_CACHECTL_REG		(0x04)
 #define G3D_FGGB_FLUSH_MSK		(0x00000033)
@@ -135,7 +134,8 @@ static inline int g3d_flush_pipeline(struct g3d_drvdata *data, unsigned int mask
 
 	if(!wait_for_completion_interruptible_timeout(&data->completion,
 								G3D_TIMEOUT)) {
-		dev_err(data->dev, "timeout while waiting for interrupt, resetting\n");
+		dev_err(data->dev, "timeout while waiting for interrupt, resetting (stat=%08x)\n",
+					g3d_read(data, G3D_FGGB_PIPESTAT_REG));
 		g3d_soft_reset(data);
 		ret = -EFAULT;
 	}
@@ -204,18 +204,18 @@ static int s3c_g3d_unlock(struct g3d_context *ctx)
 
 	if (unlikely(!ctx_has_lock(ctx))) {
 		dev_err(data->dev, "called S3C_G3D_UNLOCK without holding the hardware lock\n");
-		ret = -EPERM;
-		goto exit;
+		mutex_unlock(&data->lock);
+		return -EPERM;
 	}
-
-	mutex_unlock(&data->hw_lock);
 
 	pm_runtime_mark_last_busy(data->dev);
 	pm_runtime_put_autosuspend(data->dev);
+
+	mutex_unlock(&data->lock);
+
 	dev_dbg(data->dev, "hardware lock released by %p\n", ctx);
 
-exit:
-	mutex_unlock(&data->lock);
+	mutex_unlock(&data->hw_lock);
 
 	return ret;
 }
@@ -243,11 +243,14 @@ static int s3c_g3d_lock(struct g3d_context *ctx)
 		return 0;
 	}
 
-	g3d_flush_pipeline(data, G3D_FGGB_PIPESTAT_MSK);
-	g3d_flush_caches(data);
-	g3d_invalidate_caches(data);
-	data->hw_owner = ctx;
 	ret = 1;
+
+	if (data->hw_owner) {
+		g3d_flush_pipeline(data, G3D_FGGB_PIPESTAT_MSK);
+		ret = 2;
+	}
+
+	data->hw_owner = ctx;
 
 exit:
 	mutex_unlock(&data->lock);
@@ -268,7 +271,7 @@ static int s3c_g3d_flush(struct g3d_context *ctx, u32 mask)
 		goto exit;
 	}
 
-	ret = g3d_flush_pipeline(data, mask & G3D_FGGB_PIPESTAT_USER_MSK);
+	ret = g3d_flush_pipeline(data, mask & G3D_FGGB_PIPESTAT_MSK);
 
 exit:
 	mutex_unlock(&data->lock);

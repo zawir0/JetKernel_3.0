@@ -935,7 +935,7 @@ config USB_G_PRINTER
 	  For more information, see Documentation/usb/gadget_printer.txt
 	  which includes sample code for accessing the device file.
 
-config USB_ANDROID
+config USB_G_ANDROID
 	boolean "Android Gadget"
 	depends on SWITCH
 	help
@@ -943,15 +943,23 @@ config USB_ANDROID
 	  The functions can be configured via a board file and may be
 	  enabled and disabled dynamically.
 
+config USB_G_ANDROID_LEGACY
+	boolean "Use legacy Android Gadget driver"
+	depends on USB_G_ANDROID
+	help
+	  The Android gadget driver supports multiple USB functions.
+	  The functions can be configured via a board file and may be
+	  enabled and disabled dynamically.
+
 config USB_ANDROID_ACM
 	boolean "Android gadget ACM serial function"
-	depends on USB_ANDROID
+	depends on USB_G_ANDROID_LEGACY
 	help
 	  Provides ACM serial function for android gadget driver.
 
 config USB_ANDROID_ADB
 	boolean "Android gadget adb function"
-	depends on USB_ANDROID
+	depends on USB_G_ANDROID_LEGACY
 	help
 	  Provides adb function for android gadget driver.
 
@@ -963,19 +971,19 @@ config USB_ANDROID_ADB_ENABLED
 
 config USB_ANDROID_MASS_STORAGE
 	boolean "Android gadget mass storage function"
-	depends on USB_ANDROID && SWITCH
+	depends on USB_G_ANDROID_LEGACY && SWITCH
 	help
 	  Provides USB mass storage function for android gadget driver.
 
 config USB_ANDROID_MTP
 	boolean "Android MTP function"
-	depends on USB_ANDROID
+	depends on USB_G_ANDROID_LEGACY
 	help
 	  Provides Media Transfer Protocol (MTP) support for android gadget driver.
 
 config USB_ANDROID_RNDIS
 	boolean "Android gadget RNDIS ethernet function"
-	depends on USB_ANDROID
+	depends on USB_G_ANDROID_LEGACY
 	help
 	  Provides RNDIS ethernet function for android gadget driver.
 
@@ -989,10 +997,9 @@ config USB_ANDROID_RNDIS_WCEIS
          If you enable this option, the device is no longer CDC ethernet
          compatible.
 
-
 config USB_ANDROID_ACCESSORY
 	boolean "Android USB accessory function"
-	depends on USB_ANDROID
+	depends on USB_G_ANDROID_LEGACY
 	help
 	  Provides Android USB Accessory support for android gadget driver.
 
