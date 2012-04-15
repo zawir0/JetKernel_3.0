@@ -62,6 +62,15 @@
 
 #define AMS310FN07_IOC_GAMMA17                        _IO(AMS310FN07_IOC_MAGIC, 2)
 
+#define CAMMA_LEVELS	16//#define CAMMA_LEVELS	23
+
+#define GAMMA_SETTINGS	21 //18
+
+struct setting_table {
+	u16 reg_data;
+	s32 wait;
+};
+
 /* Platform data */
 struct ams310fn07_platform_data {
 	/* Required: GPIOs */
@@ -76,9 +85,9 @@ struct ams310fn07_platform_data {
 	struct setting_table *power_off;
 	struct setting_table *display_on;
 	struct setting_table *display_off;
-	struct setting_table **gamma_setting_idl;
-	struct setting_table **gamma_setting_vid;
-	struct setting_table **gamma_setting_cam;
+	struct setting_table (*gamma_setting_idl)[GAMMA_SETTINGS];
+	struct setting_table (*gamma_setting_vid)[GAMMA_SETTINGS];
+	struct setting_table (*gamma_setting_cam)[GAMMA_SETTINGS];
 };
 
 #endif /* _S6D05A_H_ */

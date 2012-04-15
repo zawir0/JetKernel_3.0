@@ -29,10 +29,6 @@
 #include <plat/regs-fb-v4.h>
 #include <plat/fb.h>
 
-#include <mach/regs-gpio.h>
-#include <mach/regs-modem.h>
-#include <mach/regs-clock.h>
-
 /* This driver will export a number of framebuffer interfaces depending
  * on the configuration passed in via the platform data. Each fb instance
  * maps to a hardware window. Currently there is no support for runtime
@@ -450,7 +446,6 @@ static void shadow_protect_win(struct s3c_fb_win *win, bool protect)
  */
 static int s3c_fb_set_par(struct fb_info *info)
 {
-
 	struct fb_var_screeninfo *var = &info->var;
 	struct s3c_fb_win *win = info->par;
 	struct s3c_fb *sfb = win->parent;
@@ -515,7 +510,6 @@ static int s3c_fb_set_par(struct fb_info *info)
 
 		data |= VIDCON0_ENVID | VIDCON0_ENVID_F;
 		writel(data, regs + VIDCON0);
-		printk("KB: %s Enabling framebuffer data = 0x%x, regs = 0x%x, VIDCON0 = 0x%x\n", __func__, data, regs, regs+VIDCON0);
 
 		data = VIDTCON0_VBPD(var->upper_margin - 1) |
 		       VIDTCON0_VFPD(var->lower_margin - 1) |
@@ -769,7 +763,6 @@ static int s3c_fb_setcolreg(unsigned regno,
  */
 static void s3c_fb_enable(struct s3c_fb *sfb, int enable)
 {
-	printk("KB: Entering %s\n", __func__);
 	u32 vidcon0 = readl(sfb->regs + VIDCON0);
 
 	if (enable)
@@ -798,14 +791,12 @@ static void s3c_fb_enable(struct s3c_fb *sfb, int enable)
  */
 static int s3c_fb_blank(int blank_mode, struct fb_info *info)
 {
-	printk("KB: Entering %s\n", __func__);
 	struct s3c_fb_win *win = info->par;
 	struct s3c_fb *sfb = win->parent;
 	unsigned int index = win->index;
 	u32 wincon;
 
 	dev_dbg(sfb->dev, "blank mode %d\n", blank_mode);
-	printk("%s blank mode %d\n", __func__, blank_mode);
 
 	wincon = readl(sfb->regs + sfb->variant.wincon + (index * 4));
 
@@ -1193,7 +1184,6 @@ static int __devinit s3c_fb_probe_win(struct s3c_fb *sfb, unsigned int win_no,
 				      struct s3c_fb_win_variant *variant,
 				      struct s3c_fb_win **res)
 {
-	printk("KB: Entering %s\n", __func__);
 	struct fb_var_screeninfo *var;
 	struct fb_videomode *initmode;
 	struct s3c_fb_pd_win *windata;
@@ -1203,7 +1193,6 @@ static int __devinit s3c_fb_probe_win(struct s3c_fb *sfb, unsigned int win_no,
 	int ret;
 
 	dev_dbg(sfb->dev, "probing window %d, variant %p\n", win_no, variant);
-	printk("probing window %d, variant %p\n", win_no, variant);
 
 	palette_size = variant->palette_sz * 4;
 
@@ -1313,7 +1302,6 @@ static int __devinit s3c_fb_probe_win(struct s3c_fb *sfb, unsigned int win_no,
  */
 static void s3c_fb_clear_win(struct s3c_fb *sfb, int win)
 {
-	printk("KB: Entering %s\n", __func__);
 	void __iomem *regs = sfb->regs;
 	u32 reg;
 
@@ -1325,62 +1313,8 @@ static void s3c_fb_clear_win(struct s3c_fb *sfb, int win)
 	writel(reg & ~SHADOWCON_WINx_PROTECT(win), regs + SHADOWCON);
 }
 
-static int reg_vals[] = {
-		0x000000d7,
-		0x022cc0f0,
-		0x00050701,
-		0x003d3f01,
-		0x00010016,
-		0x00010016,
-		0x00010016,
-		0x00010016,
-		0x000efb1f,
-		0x00000000,
-		0x000efb1f,
-		0x00000000,
-		0x00009021,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000000,
-		0x00000006
-};
-static int reg_adds[] = {
-		  0x000,
-		  0x004,
-		  0x010,
-		  0x014,
-		  0x024,
-		  0x028,
-		  0x02c,
-		  0x030,
-		  0x044,
-		  0x048,
-		  0x054,
-		  0x05c,
-		  0x130,
-		  0x134,
-		  0x140,
-		  0x144,
-		  0x148,
-		  0x14c,
-		  0x150,
-		  0x154,
-		  0x158,
-		  0x15c,
-		  0x170,
-		  0x1a0
-};
-
 static int __devinit s3c_fb_probe(struct platform_device *pdev)
 {
-	printk("KB: Entering %s\n", __func__);
 	const struct platform_device_id *platid;
 	struct s3c_fb_driverdata *fbdrv;
 	struct device *dev = &pdev->dev;
@@ -1414,7 +1348,6 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 	init_waitqueue_head(&sfb->vsync_info.wait);
 
 	dev_dbg(dev, "allocate new framebuffer %p\n", sfb);
-	printk("allocate new framebuffer %p\n", sfb);
 
 	sfb->dev = dev;
 	sfb->pdata = pd;
@@ -1486,7 +1419,6 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 	}
 
 	dev_dbg(dev, "got resources (regs %p), probing windows\n", sfb->regs);
-	printk("got resources (regs %p), probing windows\n", sfb->regs);
 
 	platform_set_drvdata(pdev, sfb);
 	pm_runtime_get_sync(sfb->dev);
@@ -1534,27 +1466,6 @@ static int __devinit s3c_fb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, sfb);
 	pm_runtime_put_sync(sfb->dev);
-
-	printk("Successfully returning from %s\n", __func__);
-#if 0
-	int ctr, count;
-	int *ptr;
-	ptr = reg_adds;
-	count = sizeof(reg_adds)/sizeof(reg_adds[0]);
-
-	for (ctr = 0; ctr < count; ctr++) {
-		printk("Register %p saved value %08lx\n", sfb->regs + reg_adds[ctr], reg_vals[ctr]);
-		writel(reg_vals[ctr], sfb->regs + reg_adds[ctr]);
-	}
-
-	for (ctr = 0; ctr < count; ctr++, ptr++) {
-		printk("Register %p value %08lx\n", sfb->regs + reg_adds[ctr], __raw_readl(sfb->regs + reg_adds[ctr]));
-	}
-#endif
-
-	printk("Register %p value %08lx\n", S3C64XX_MODEM_MIFPCON, __raw_readl(S3C64XX_MODEM_MIFPCON));
-	printk("Register %p value %08lx\n", S3C64XX_SPCON, __raw_readl(S3C64XX_SPCON));
-	printk("Register %p value %08lx\n", S3C_SCLK_GATE, __raw_readl(S3C_SCLK_GATE));
 
 	return 0;
 

@@ -858,14 +858,6 @@ static struct platform_device spica_s6d05a = {
 	},
 };
 
-#if 0
-struct platform_device sec_device_backlight = {
-	.name   = "ams320fs01-backlight",
-	.id     = -1,
-};
-
-#else
-
 static struct ams310fn07_platform_data jet_ams310fn07_pdata = {
 	.reset_gpio	= GPIO_LCD_RST_N,
 	.cs_gpio	= GPIO_LCD_CS_N,
@@ -881,7 +873,7 @@ static struct platform_device jet_ams310fn07 = {
 		.parent		= &s3c_device_fb.dev
 	},
 };
-#endif
+
 /*
  * SDHCI platform data
  */
@@ -1008,7 +1000,7 @@ static struct platform_device mmc2_fixed_voltage = {
 /*
  * Framebuffer
  */
-#define SECOND_FB 1
+//#define SECOND_FB 1
 
 static struct s3c_fb_pd_win jet_fb_win[] = {
 	[0] = {
@@ -1079,7 +1071,7 @@ static struct s3c_fb_platdata jet_lcd_pdata __initdata = {
 	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
 //			| VIDCON0_CLKSEL_LCD,
 	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC
-			| VIDCON1_INV_VDEN,
+			| VIDCON1_INV_VDEN | VIDCON1_INV_VCLK,
 	.dithmode	= DITHMODE_R_POS_8BIT | DITHMODE_G_POS_8BIT
 			| DITHMODE_B_POS_8BIT | DITHMODE_DITH_EN,
 };
@@ -2033,7 +2025,6 @@ static struct platform_device *spica_devices[] __initdata = {
 	&s3c_device_hsmmc0,
 	&s3c_device_hsmmc1,
 	&s3c_device_hsmmc2,
-	//&s3c_device_rtc,
 	&sec_device_rtc,
 	&s3c_device_i2c0,
 	&s3c_device_fb,
@@ -2045,14 +2036,10 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_android_usb,
 	&s3c_device_onenand,
 	&samsung_device_keypad,
-	//&s3c_device_keypad_jet,
 	&jet_fm_i2c,
 	&jet_audio_i2c,
-	//&spica_s6d05a,
 	&jet_ams310fn07,
-	//&sec_device_backlight,
 	&spica_ram_console,
-	//&spica_gpio_keys,
 	&jet_gpio_keys,
 	&s3c_device_adc,
 	&s3c_device_ts,
