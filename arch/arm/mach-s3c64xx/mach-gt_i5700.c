@@ -63,6 +63,7 @@
 
 #include <media/s5k4ca_platform.h>
 #include <media/s3c_fimc.h>
+#include <media/v4l2-mediabus.h>
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
@@ -819,7 +820,8 @@ static struct s3c_fimc_isp_info spica_fimc_isp_infos[] = {
 		.clk_frequency	= 24000000,
 		.bus_type	= FIMC_ITU_601,
 		.i2c_bus_num	= 1,
-		.flags		= FIMC_CLK_INV_VSYNC,
+		.flags		= V4L2_MBUS_VSYNC_ACTIVE_LOW,
+		.clk_id		= 0,
 	}
 };
 
@@ -830,13 +832,20 @@ static struct s3c_platform_fimc spica_fimc_pdata = {
 
 static u64 spica_fimc_dma_mask = DMA_BIT_MASK(32);
 
+static struct platform_device spica_fimc_md_device = {
+	.name		= "s3c-fimc-md",
+	.id		= -1,
+	.dev	= {
+		.platform_data	= &spica_fimc_pdata,
+	},
+};
+
 static struct platform_device spica_fimc_device = {
-	.name		= "s3c64xx-fimc",
+	.name		= "s3c-fimc",
 	.id		= 0,
 	.resource	= s3c_fimc_resource,
 	.num_resources	= ARRAY_SIZE(s3c_fimc_resource),
 	.dev	= {
-		.platform_data	= &spica_fimc_pdata,
 		.parent		= &s3c64xx_device_pd[S3C64XX_DOMAIN_I].dev,
 		.dma_mask		= &spica_fimc_dma_mask,
 		.coherent_dma_mask	= DMA_BIT_MASK(32),
@@ -1986,6 +1995,7 @@ static struct platform_device *spica_devices[] __initdata = {
 	&spica_bml_device,
 	&spica_led,
 	&spica_fimc_device,
+	&spica_fimc_md_device,
 };
 
 /*
@@ -2031,24 +2041,6 @@ static struct resource s3c_jpeg_resource[] = {
 	}
 };
 
-static struct resource s3c_camif_resource[] = {
-	[0] = {
-		.start = S3C64XX_PA_CAMIF,
-		.end   = S3C64XX_PA_CAMIF + SZ_4M - 1,
-		.flags = IORESOURCE_MEM,
-	},
-	[1] = {
-		.start = IRQ_CAMIF_C,
-		.end   = IRQ_CAMIF_C,
-		.flags = IORESOURCE_IRQ,
-	},
-	[2] = {
-		.start = IRQ_CAMIF_P,
-		.end   = IRQ_CAMIF_P,
-		.flags = IORESOURCE_IRQ,
-	}
-};
-
 static struct resource s3c_g2d_resource[] = {
 	[0] = {
 		.start = S3C64XX_PA_2D,
@@ -2088,6 +2080,8 @@ static struct resource s3c_pp_resource[] = {
 	}
 };
 
+static u64 full_dmamask = DMA_BIT_MASK(32);
+
 static struct platform_device *spica_mod_devices[] __initdata = {
 	&(struct platform_device){
 		.name		= "s3c-g3d",
@@ -2112,14 +2106,8 @@ static struct platform_device *spica_mod_devices[] __initdata = {
 		.resource	= s3c_jpeg_resource,
 		.dev		= {
 			.parent	= &s3c64xx_device_pd[S3C64XX_DOMAIN_I].dev,
-		},
-	}, &(struct platform_device){
-		.name		= "s3c-fimc",
-		.id		= -1,
-		.num_resources	= ARRAY_SIZE(s3c_camif_resource),
-		.resource	= s3c_camif_resource,
-		.dev		= {
-			.parent	= &s3c64xx_device_pd[S3C64XX_DOMAIN_I].dev,
+			.dma_mask = &full_dmamask,
+			.coherent_dma_mask = DMA_BIT_MASK(32),
 		},
 	}, &(struct platform_device){
 		.name		= "s3c-g2d",
