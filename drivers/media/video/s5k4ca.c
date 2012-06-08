@@ -15,6 +15,8 @@
  * (at your option) any later version.
  */
 
+#define DEBUG
+
 #include <linux/slab.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
@@ -24,37 +26,35 @@
 #include <media/v4l2-subdev.h>
 #include <media/v4l2-mediabus.h>
 #include <media/v4l2-ctrls.h>
-#include <media/videodev2_samsung.h>
 #include <media/s5k4ca_platform.h>
 
 #include "s5k4ca.h"
 
-#define S5K4CA_DRIVER_NAME	"s5k4ca"
-
-#define VIEW_FUNCTION_CALL
-
-#ifdef VIEW_FUNCTION_CALL
 #define TRACE_CALL	\
-	printk("[S5k4CA] function %s line %d executed\n", __func__, __LINE__);
-#else
-#define TRACE_CALL
-#endif
+	pr_debug("[S5k4CA] function %s line %d executed\n", __func__, __LINE__);
 
 #define S5K4CA_WIN_WIDTH_MAX		2048
 #define S5K4CA_WIN_HEIGHT_MAX		1536
 #define S5K4CA_WIN_WIDTH_MIN		8
 #define S5K4CA_WIN_HEIGHT_MIN		8
 
+#define V4L2_CID_S5K4CA_WB_PRESET	(V4L2_CTRL_CLASS_CAMERA | 0x1001)
+#define V4L2_CID_S5K4CA_ISO		(V4L2_CTRL_CLASS_CAMERA | 0x1002)
+#define V4L2_CID_S5K4CA_METERING	(V4L2_CTRL_CLASS_CAMERA | 0x1003)
+#define V4L2_CID_S5K4CA_FRAME_RATE	(V4L2_CTRL_CLASS_CAMERA | 0x1004)
+#define V4L2_CID_S5K4CA_CAPTURE		(V4L2_CTRL_CLASS_CAMERA | 0x1005)
+
 struct s5k4ca_ctrls {
 	struct v4l2_ctrl_handler handler;
-	/* TODO */
+
+	struct v4l2_ctrl *auto_wb;
+	struct v4l2_ctrl *wb_preset;
 };
 
 struct s5k4ca_preset {
 	/* output pixel format and resolution */
 	struct v4l2_mbus_framefmt mbus_fmt;
 	u8 clk_id;
-	u8 index;
 };
 
 struct s5k4ca_interval {
@@ -92,7 +92,10 @@ struct s5k4ca_state {
 	int photometry;
 	int white_balance;
 	int capture;
-	int ae_awb_lock;
+
+#define AE_FLAG		(1 << 0)
+#define AWB_FLAG	(1 << 1)
+	int ae_awb_enable;
 
 	struct mutex lock;
 
@@ -249,33 +252,27 @@ static int s5k4ca_set_wb(struct v4l2_subdev *sd, int type)
 	TRACE_CALL;
 
 	switch (type) {
-	case WHITE_BALANCE_AUTO:
-		state->white_balance = 0;
-		printk("-> WB auto mode\n");
-		ret = s5k4ca_write_regs(state, s5k4ca_wb_auto,
-					ARRAY_SIZE(s5k4ca_wb_auto));
-		break;
-	case WHITE_BALANCE_SUNNY:
+	case 0:
 		state->white_balance = 1;
-		printk("-> WB Sunny mode\n");
+		v4l2_info(sd, "-> WB Sunny mode\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_wb_sunny,
 					ARRAY_SIZE(s5k4ca_wb_sunny));
 		break;
-	case WHITE_BALANCE_CLOUDY:
+	case 1:
 		state->white_balance = 2;
-		printk("-> WB Cloudy mode\n");
+		v4l2_info(sd, "-> WB Cloudy mode\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_wb_cloudy,
 					ARRAY_SIZE(s5k4ca_wb_cloudy));
 		break;
-	case WHITE_BALANCE_TUNGSTEN:
+	case 2:
 		state->white_balance = 3;
-		printk("-> WB Tungsten mode\n");
+		v4l2_info(sd, "-> WB Tungsten mode\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_wb_tungsten,
 					ARRAY_SIZE(s5k4ca_wb_tungsten));
 		break;
-	case WHITE_BALANCE_FLUORESCENT:
+	case 3:
 		state->white_balance = 4;
-		printk("-> WB Flourescent mode\n");
+		v4l2_info(sd, "-> WB Flourescent mode\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_wb_fluorescent,
 					ARRAY_SIZE(s5k4ca_wb_fluorescent));
 		break;
@@ -297,36 +294,36 @@ static int s5k4ca_set_effect(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Effects Mode %d", type);
+	v4l2_info(sd, "[CAM-SENSOR] =Effects Mode %d", type);
 
 	switch (type) {
-	case IMAGE_EFFECT_NONE:
-		printk("-> Mode None\n");
+	case V4L2_COLORFX_NONE:
+		v4l2_info(sd, "-> Mode None\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_off,
 					ARRAY_SIZE(s5k4ca_effect_off));
 		break;
-	case IMAGE_EFFECT_BNW:
-		printk("-> Mode Gray\n");
+	case V4L2_COLORFX_BW:
+		v4l2_info(sd, "-> Mode Gray\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_gray,
 					ARRAY_SIZE(s5k4ca_effect_gray));
 		break;
-	case IMAGE_EFFECT_NEGATIVE:
-		printk("-> Mode Negative\n");
+	case V4L2_COLORFX_NEGATIVE:
+		v4l2_info(sd, "-> Mode Negative\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_negative,
 					ARRAY_SIZE(s5k4ca_effect_negative));
 		break;
-	case IMAGE_EFFECT_SEPIA:
-		printk("-> Mode Sepia\n");
+	case V4L2_COLORFX_SEPIA:
+		v4l2_info(sd, "-> Mode Sepia\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_sepia,
 					ARRAY_SIZE(s5k4ca_effect_sepia));
 		break;
-	case IMAGE_EFFECT_AQUA:
-		printk("-> Mode Aqua\n");
+	case V4L2_COLORFX_SKY_BLUE:
+		v4l2_info(sd, "-> Mode Aqua\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_aqua,
 					ARRAY_SIZE(s5k4ca_effect_aqua));
 		break;
-	case IMAGE_EFFECT_ANTIQUE:
-		printk("-> Mode Sketch\n");
+	case V4L2_COLORFX_SKETCH:
+		v4l2_info(sd, "-> Mode Sketch\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_effect_sketch,
 					ARRAY_SIZE(s5k4ca_effect_sketch));
 		break;
@@ -341,6 +338,7 @@ static int s5k4ca_set_effect(struct v4l2_subdev *sd, int type)
 	return 0;
 }
 
+#if 0
 static int s5k4ca_set_scene_mode(struct v4l2_subdev *sd, int type)
 {
 	int ret;
@@ -348,7 +346,7 @@ static int s5k4ca_set_scene_mode(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("\n[S5k4ca] scene mode type is %d\n", type);
+	v4l2_info(sd, "\n[S5k4ca] scene mode type is %d\n", type);
 
 	ret = s5k4ca_write_regs(state, s5k4ca_scene_auto,
 						ARRAY_SIZE(s5k4ca_scene_auto));
@@ -417,6 +415,7 @@ static int s5k4ca_set_scene_mode(struct v4l2_subdev *sd, int type)
 	state->scene_mode = type;
 	return 0;
 }
+#endif
 
 static int s5k4ca_set_br(struct v4l2_subdev *sd, int type)
 {
@@ -425,42 +424,42 @@ static int s5k4ca_set_br(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Brightness Mode %d", type);
+	v4l2_info(sd, "[CAM-SENSOR] =Brightness Mode %d", type);
 
 	switch (type) {
-	case EV_MINUS_4:
+	case -4:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_minus4,
 						ARRAY_SIZE(s5k4ca_br_minus4));
 		break;
-	case EV_MINUS_3:
+	case -3:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_minus3,
 						ARRAY_SIZE(s5k4ca_br_minus3));
 		break;
-	case EV_MINUS_2:
+	case -2:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_minus2,
 						ARRAY_SIZE(s5k4ca_br_minus2));
 		break;
-	case EV_MINUS_1:
+	case -1:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_minus1,
 						ARRAY_SIZE(s5k4ca_br_minus1));
 		break;
-	case EV_DEFAULT:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_zero,
 						ARRAY_SIZE(s5k4ca_br_zero));
 		break;
-	case EV_PLUS_1:
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_plus1,
 						ARRAY_SIZE(s5k4ca_br_plus1));
 		break;
-	case EV_PLUS_2:
+	case 2:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_plus2,
 						ARRAY_SIZE(s5k4ca_br_plus2));
 		break;
-	case EV_PLUS_3:
+	case 3:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_plus3,
 						ARRAY_SIZE(s5k4ca_br_plus3));
 		break;
-	case EV_PLUS_4:
+	case 4:
 		ret = s5k4ca_write_regs(state, s5k4ca_br_plus4,
 						ARRAY_SIZE(s5k4ca_br_plus4));
 		break;
@@ -482,29 +481,31 @@ static int s5k4ca_set_contrast(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Contras Mode %d",type);
+	v4l2_info(sd, "[CAM-SENSOR] =Contras Mode %d",type);
 
 	switch (type) {
-	case CONTRAST_MINUS_2:
+	case -2:
 		ret = s5k4ca_write_regs(state, s5k4ca_contrast_m2,
 					ARRAY_SIZE(s5k4ca_contrast_m2));
 		break;
-	case CONTRAST_MINUS_1:
+	case -1:
 		ret = s5k4ca_write_regs(state, s5k4ca_contrast_m1,
 					ARRAY_SIZE(s5k4ca_contrast_m1));
 		break;
-	case CONTRAST_DEFAULT:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_contrast_0,
 					ARRAY_SIZE(s5k4ca_contrast_0));
 		break;
-	case CONTRAST_PLUS_1:
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_contrast_p1,
 					ARRAY_SIZE(s5k4ca_contrast_p1));
 		break;
-	case CONTRAST_PLUS_2:
+	case 2:
 		ret = s5k4ca_write_regs(state, s5k4ca_contrast_p2,
 					ARRAY_SIZE(s5k4ca_contrast_p2));
 		break;
+	default:
+		return -EINVAL;
 	}
 
 	if (ret < 0)
@@ -521,26 +522,26 @@ static int s5k4ca_set_saturation(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Saturation Mode %d",type);
+	v4l2_info(sd, "[CAM-SENSOR] =Saturation Mode %d",type);
 
 	switch (type) {
-	case SATURATION_MINUS_2:
+	case -2:
 		ret = s5k4ca_write_regs(state, s5k4ca_Saturation_m2,
 					ARRAY_SIZE(s5k4ca_Saturation_m2));
 		break;
-	case SATURATION_MINUS_1:
+	case -1:
 		ret = s5k4ca_write_regs(state, s5k4ca_Saturation_m1,
 					ARRAY_SIZE(s5k4ca_Saturation_m1));
 		break;
-	case SATURATION_DEFAULT:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_Saturation_0,
 					ARRAY_SIZE(s5k4ca_Saturation_0));
 		break;
-	case SATURATION_PLUS_1:
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_Saturation_p1,
 					ARRAY_SIZE(s5k4ca_Saturation_p1));
 		break;
-	case SATURATION_PLUS_2:
+	case 2:
 		ret = s5k4ca_write_regs(state, s5k4ca_Saturation_p2,
 					ARRAY_SIZE(s5k4ca_Saturation_p2));
 		break;
@@ -562,26 +563,26 @@ static int s5k4ca_set_sharpness(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Sharpness Mode %d",type);
+	v4l2_info(sd, "[CAM-SENSOR] =Sharpness Mode %d",type);
 
 	switch (type) {
-	case SHARPNESS_MINUS_2:
+	case -2:
 		ret = s5k4ca_write_regs(state, s5k4ca_Sharpness_m2,
 					ARRAY_SIZE(s5k4ca_Sharpness_m2));
 		break;
-	case SHARPNESS_MINUS_1:
+	case -1:
 		ret = s5k4ca_write_regs(state, s5k4ca_Sharpness_m1,
 					ARRAY_SIZE(s5k4ca_Sharpness_m1));
 		break;
-	case SHARPNESS_DEFAULT:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_Sharpness_0,
 					ARRAY_SIZE(s5k4ca_Sharpness_0));
 		break;
-	case SHARPNESS_PLUS_1:
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_Sharpness_p1,
 					ARRAY_SIZE(s5k4ca_Sharpness_p1));
 		break;
-	case SHARPNESS_PLUS_2:
+	case 2:
 		ret = s5k4ca_write_regs(state, s5k4ca_Sharpness_p2,
 					ARRAY_SIZE(s5k4ca_Sharpness_p2));
 		break;
@@ -603,31 +604,31 @@ static int s5k4ca_set_iso(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Iso Mode %d",type);
+	v4l2_info(sd, "[CAM-SENSOR] =Iso Mode %d",type);
 
 	switch (type) {
-	case ISO_AUTO:
-		printk("-> ISO AUTO\n");
+	case 0:
+		v4l2_info(sd, "-> ISO AUTO\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_iso_auto,
 					ARRAY_SIZE(s5k4ca_iso_auto));
 		break;
-	case ISO_50:
-		printk("-> ISO 50\n");
+	case 1:
+		v4l2_info(sd, "-> ISO 50\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_iso50,
 					ARRAY_SIZE(s5k4ca_iso50));
 		break;
-	case ISO_100:
-		printk("-> ISO 100\n");
+	case 2:
+		v4l2_info(sd, "-> ISO 100\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_iso100,
 					ARRAY_SIZE(s5k4ca_iso100));
 		break;
-	case ISO_200:
-		printk("-> ISO 200\n");
+	case 3:
+		v4l2_info(sd, "-> ISO 200\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_iso200,
 					ARRAY_SIZE(s5k4ca_iso200));
 		break;
-	case ISO_400:
-		printk("-> ISO 400\n");
+	case 4:
+		v4l2_info(sd, "-> ISO 400\n");
 		ret = s5k4ca_write_regs(state, s5k4ca_iso400,
 					ARRAY_SIZE(s5k4ca_iso400));
 		break;
@@ -649,20 +650,20 @@ static int s5k4ca_set_photometry(struct v4l2_subdev *sd, int type)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =Photometry Mode %d", type);
+	v4l2_info(sd, "[CAM-SENSOR] =Photometry Mode %d", type);
 
 	switch (type) {
-	case METERING_SPOT:
+	case 0:
+		ret = s5k4ca_write_regs(state, s5k4ca_photometry_center,
+					ARRAY_SIZE(s5k4ca_photometry_center));
+		break;
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_photometry_spot,
 					ARRAY_SIZE(s5k4ca_photometry_spot));
 		break;
-	case METERING_MATRIX:
+	case 2:
 		ret = s5k4ca_write_regs(state, s5k4ca_photometry_matrix,
 					ARRAY_SIZE(s5k4ca_photometry_matrix));
-		break;
-	case METERING_CENTER:
-		ret = s5k4ca_write_regs(state, s5k4ca_photometry_center,
-					ARRAY_SIZE(s5k4ca_photometry_center));
 		break;
 	default:
 		return -EINVAL;
@@ -675,29 +676,29 @@ static int s5k4ca_set_photometry(struct v4l2_subdev *sd, int type)
 	return 0;
 }
 
-static int s5k4ca_set_ae_awb_lock(struct v4l2_subdev *sd, int type)
+static int s5k4ca_update_ae_awb(struct v4l2_subdev *sd)
 {
 	int ret;
 	struct s5k4ca_state *state = to_state(sd);
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =AE AWB Lock Mode %d", type);
+	v4l2_info(sd, "[CAM-SENSOR] =AE AWB Enable %d", state->ae_awb_enable);
 
-	switch (type) {
-	case AE_UNLOCK_AWB_UNLOCK:
+	switch (state->ae_awb_enable) {
+	case AE_FLAG | AWB_FLAG:
 		ret = s5k4ca_write_regs(state, s5k4ca_awb_ae_unlock,
 					ARRAY_SIZE(s5k4ca_awb_ae_unlock));
 		break;
-	case AE_LOCK_AWB_UNLOCK:
+	case AWB_FLAG:
 		ret = s5k4ca_write_regs(state, s5k4ca_awb_ae_lock,
 					ARRAY_SIZE(s5k4ca_awb_ae_lock));
 		break;
-	case AE_UNLOCK_AWB_LOCK:
+	case AE_FLAG:
 		ret = s5k4ca_write_regs(state, s5k4ca_mwb_ae_unlock,
 					ARRAY_SIZE(s5k4ca_mwb_ae_unlock));
 		break;
-	case AE_LOCK_AWB_LOCK:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_mwb_ae_lock,
 					ARRAY_SIZE(s5k4ca_mwb_ae_lock));
 		break;
@@ -708,7 +709,6 @@ static int s5k4ca_set_ae_awb_lock(struct v4l2_subdev *sd, int type)
 	if (ret < 0)
 		return ret;
 
-	state->ae_awb_lock = type;
 	return 0;
 }
 
@@ -719,22 +719,22 @@ static int s5k4ca_framerate_set(struct v4l2_subdev *sd, int rate)
 
 	TRACE_CALL;
 
-	printk("[CAM-SENSOR] =frame rate = %d\n", rate);
+	v4l2_info(sd, "[CAM-SENSOR] =frame rate = %d\n", rate);
 
 	switch (rate) {
-	case FRAME_RATE_AUTO:
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_fps_auto,
 						ARRAY_SIZE(s5k4ca_fps_auto));
 		break;
-	case FRAME_RATE_7:
+	case 7:
 		ret = s5k4ca_write_regs(state, s5k4ca_fps_7,
 						ARRAY_SIZE(s5k4ca_fps_7));
 		break;
-	case FRAME_RATE_15:
+	case 15:
 		ret = s5k4ca_write_regs(state, s5k4ca_fps_15,
 						ARRAY_SIZE(s5k4ca_fps_15));
 		break;
-	case FRAME_RATE_30:
+	case 30:
 		ret = s5k4ca_write_regs(state, s5k4ca_fps_30,
 						ARRAY_SIZE(s5k4ca_fps_30));
 		break;
@@ -758,17 +758,17 @@ static int s5k4ca_set_focus_mode(struct v4l2_subdev *sd, int mode)
 	TRACE_CALL;
 
 	switch(mode) {
-	case FOCUS_MODE_AUTO:
+	case -1:
+		ret = s5k4ca_write_regs(state, s5k4ca_focus_mode_infinity,
+					ARRAY_SIZE(s5k4ca_focus_mode_infinity));
+		break;
+	case 0:
 		ret = s5k4ca_write_regs(state, s5k4ca_focus_mode_normal,
 					ARRAY_SIZE(s5k4ca_focus_mode_normal));
 		break;
-	case FOCUS_MODE_MACRO:
+	case 1:
 		ret = s5k4ca_write_regs(state, s5k4ca_focus_mode_macro,
 					ARRAY_SIZE(s5k4ca_focus_mode_macro));
-		break;
-	case FOCUS_MODE_INFINITY:
-		ret = s5k4ca_write_regs(state, s5k4ca_focus_mode_infinity,
-					ARRAY_SIZE(s5k4ca_focus_mode_infinity));
 		break;
 	default:
 		return -EINVAL;
@@ -784,25 +784,19 @@ static int s5k4ca_set_focus_mode(struct v4l2_subdev *sd, int mode)
 static int s5k4ca_set_capture(struct v4l2_subdev *sd, int mode)
 {
 	struct s5k4ca_state *state = to_state(sd);
-	int ret;
 
 	TRACE_CALL;
 
-	if (mode)
-		ret = s5k4ca_write_regs(state, s5k4ca_snapshot_enable,
-					ARRAY_SIZE(s5k4ca_snapshot_enable));
-	else
-		ret = s5k4ca_write_regs(state, s5k4ca_snapshot_disable,
-					ARRAY_SIZE(s5k4ca_snapshot_disable));
+	if (state->streaming)
+		return -EBUSY;
 
-	if (ret < 0)
-		return ret;
-
+	state->apply_cfg = 1;
 	state->capture = mode;
-	return ret;
+
+	return 0;
 }
 
-static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd, int val)
+static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd)
 {
 	struct s5k4ca_state *state = to_state(sd);
 	int count = 50;
@@ -812,11 +806,8 @@ static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd, int val)
 
 	TRACE_CALL;
 
-	if (state->focus_mode == FOCUS_MODE_INFINITY)
+	if (state->focus_mode == -1)
 		return 0;
-
-	if (val == AUTO_FOCUS_OFF)
-		return s5k4ca_set_focus_mode(sd, state->focus_mode);
 
 	/* Get lux_value. */
 	ret = s5k4ca_sensor_read(state, 0x12FE, &lux_value);
@@ -833,7 +824,7 @@ static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd, int val)
 	if (ret < 0)
 		return ret;
 
-	if (state->focus_mode == FOCUS_MODE_MACRO)
+	if (state->focus_mode == 1)
 		ret = s5k4ca_write_regs(state, s5k4ca_af_start_macro,
 					ARRAY_SIZE(s5k4ca_af_start_macro));
 	else
@@ -855,7 +846,7 @@ static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd, int val)
 	} while (--count && (stat & 3) < 2);
 
 	if (!count || (stat & 3) == 2) {
-		if (state->focus_mode == FOCUS_MODE_MACRO)
+		if (state->focus_mode == 1)
 			ret = s5k4ca_write_regs(state, s5k4ca_af_stop_macro,
 					ARRAY_SIZE(s5k4ca_af_stop_macro));
 		else
@@ -865,14 +856,11 @@ static int s5k4ca_set_auto_focus(struct v4l2_subdev *sd, int val)
 		if (ret < 0)
 			return ret;
 
-		printk("[CAM-SENSOR] =Auto focus failed\n");
-
-		state->auto_focus_result = 0;
-		return 0;
+		v4l2_info(sd, "[CAM-SENSOR] =Auto focus failed\n");
+		return -EFAULT;
 	}
 
-	printk("[CAM-SENSOR] =Auto focus successful\n");
-	state->auto_focus_result = 1;
+	v4l2_info(sd, "[CAM-SENSOR] =Auto focus successful\n");
 	return 0;
 }
 
@@ -893,49 +881,57 @@ static int s5k4ca_s_ctrl(struct v4l2_ctrl *ctrl)
 	if (!state->powered)
 		goto unlock;
 
-	printk("[S5k4CA] %s function ctrl->id : %d \n", __func__, ctrl->id);
+	v4l2_info(sd, "[S5k4CA] %s function ctrl->id : %d \n", __func__, ctrl->id);
 
 	switch (ctrl->id) {
-	case V4L2_CID_CAMERA_FRAME_RATE:
+	case V4L2_CID_S5K4CA_FRAME_RATE:
 		err = s5k4ca_framerate_set(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_FOCUS_MODE:
+	case V4L2_CID_FOCUS_ABSOLUTE:
 		err = s5k4ca_set_focus_mode(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_SET_AUTO_FOCUS:
-		err = s5k4ca_set_auto_focus(sd, ctrl->val);
+	case V4L2_CID_FOCUS_AUTO:
+		err = s5k4ca_set_auto_focus(sd);
 		break;
-	case V4L2_CID_CAMERA_WHITE_BALANCE:
+	case V4L2_CID_AUTO_WHITE_BALANCE:
+		if (ctrl->val)
+			state->ae_awb_enable |= AWB_FLAG;
+		else
+			state->ae_awb_enable &= ~AWB_FLAG;
+		err = s5k4ca_update_ae_awb(sd);
+		break;
+	case V4L2_CID_S5K4CA_WB_PRESET:
 		err = s5k4ca_set_wb(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_EFFECT:
+	case V4L2_CID_COLORFX:
 		err = s5k4ca_set_effect(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_SCENE_MODE:
-		err = s5k4ca_set_scene_mode(sd, ctrl->val);
-		break;
-	case V4L2_CID_CAMERA_BRIGHTNESS:
+	case V4L2_CID_BRIGHTNESS:
 		err = s5k4ca_set_br(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_CONTRAST:
+	case V4L2_CID_CONTRAST:
 		err = s5k4ca_set_contrast(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_SATURATION:
+	case V4L2_CID_SATURATION:
 		err = s5k4ca_set_saturation(sd, ctrl->val);
 		break;
 	case V4L2_CID_SHARPNESS:
 		err = s5k4ca_set_sharpness(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_SHARPNESS:
+	case V4L2_CID_S5K4CA_ISO:
 		err = s5k4ca_set_iso(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_METERING:
+	case V4L2_CID_S5K4CA_METERING:
 		err = s5k4ca_set_photometry(sd, ctrl->val);
 		break;
-	case V4L2_CID_CAMERA_AEAWB_LOCK_UNLOCK:
-		err = s5k4ca_set_ae_awb_lock(sd, ctrl->val);
+	case V4L2_CID_EXPOSURE_AUTO:
+		if (ctrl->val)
+			state->ae_awb_enable |= AE_FLAG;
+		else
+			state->ae_awb_enable &= ~AE_FLAG;
+		err = s5k4ca_update_ae_awb(sd);
 		break;
-	case V4L2_CID_CAMERA_CAPTURE:
+	case V4L2_CID_S5K4CA_CAPTURE:
 		err = s5k4ca_set_capture(sd, ctrl->val);
 		break;
 	}
@@ -960,7 +956,7 @@ static void s5k4ca_bound_image(struct s5k4ca_state *state, u32 *w, u32 *h)
 	TRACE_CALL;
 
 	for (i = 0; i < ARRAY_SIZE(s5k4ca_formats); ++i) {
-		if (!((!state->capture) & s5k4ca_formats[i].preview)) {
+		if (!state->capture && !s5k4ca_formats[i].preview) {
 			--i;
 			break;
 		}
@@ -1026,7 +1022,7 @@ static int s5k4ca_enum_frame_size(struct v4l2_subdev *sd,
 	if (fse->index >= ARRAY_SIZE(s5k4ca_formats))
 		return -EINVAL;
 
-	if (!((!state->capture) & s5k4ca_formats[fse->index].preview))
+	if (!state->capture && !s5k4ca_formats[fse->index].preview)
 		return -EINVAL;
 
 	fse->code	= V4L2_MBUS_FMT_VYUY8_2X8;
@@ -1157,13 +1153,21 @@ static int s5k4ca_s_power(struct v4l2_subdev *sd, int on)
 
 	v4l2_info(sd, "Camera preview status = %d\n", stat);
 
-	state->powered = 1;
+	ret = s5k4ca_sensor_read(state, 0x02ee, &stat);
+	if (ret < 0)
+		goto unlock;
 
-	ret = v4l2_ctrl_handler_setup(sd->ctrl_handler);
+	v4l2_info(sd, "Camera capture status = %d\n", stat);
+
+	state->powered = 1;
 
 unlock:
 	mutex_unlock(&state->lock);
-	return ret;
+
+	if (!on || ret < 0)
+		return ret;
+
+	return v4l2_ctrl_handler_setup(sd->ctrl_handler);
 }
 
 static int s5k4ca_log_status(struct v4l2_subdev *sd)
@@ -1198,6 +1202,9 @@ static int s5k4ca_apply_cfg(struct s5k4ca_state *state)
 	if (i >= ARRAY_SIZE(s5k4ca_formats))
 		return -EINVAL;
 
+	if (!s5k4ca_formats[i].preview && !state->capture)
+		return -EINVAL;
+
 	ret = s5k4ca_write_regs(state, s5k4ca_formats[i].table,
 						s5k4ca_formats[i].table_length);
 	if (ret < 0)
@@ -1215,26 +1222,43 @@ static int s5k4ca_stream(struct s5k4ca_state *s5k4ca, int enable)
 
 	TRACE_CALL;
 
-	if (enable)
-		ret = s5k4ca_write_regs(s5k4ca, s5k4ca_preview_enable,
+	if (s5k4ca->capture) {
+		if (enable)
+			ret = s5k4ca_write_regs(s5k4ca, s5k4ca_snapshot_enable,
+					ARRAY_SIZE(s5k4ca_snapshot_enable));
+		else
+			ret = s5k4ca_write_regs(s5k4ca, s5k4ca_snapshot_disable,
+					ARRAY_SIZE(s5k4ca_snapshot_disable));
+	} else {
+		if (enable)
+			ret = s5k4ca_write_regs(s5k4ca, s5k4ca_preview_enable,
 					ARRAY_SIZE(s5k4ca_preview_enable));
-	else
-		ret = s5k4ca_write_regs(s5k4ca, s5k4ca_preview_disable,
+		else
+			ret = s5k4ca_write_regs(s5k4ca, s5k4ca_preview_disable,
 					ARRAY_SIZE(s5k4ca_preview_disable));
+	}
 
 	if (ret < 0)
 		return ret;
 
 	if (enable) {
-		ret = s5k4ca_sensor_read(s5k4ca, 0x02e8, &stat);
+		if (s5k4ca->capture)
+			ret = s5k4ca_sensor_read(s5k4ca, 0x02ee, &stat);
+		else
+			ret = s5k4ca_sensor_read(s5k4ca, 0x02e8, &stat);
 		if (ret < 0)
 			return ret;
 		if (stat) {
 			v4l2_err(&s5k4ca->sd,
-				"Failed to enable streaming (stat=%d)\n", stat);
+				"Failed to enable %s (stat=%d)\n",
+				(s5k4ca->capture) ? "capture" : "preview", stat);
 			return -EFAULT;
 		}
 	}
+
+	v4l2_info(&s5k4ca->sd, "%s %s\n",
+				(s5k4ca->capture) ? "capture" : "preview",
+				(enable) ? "enabled" : "disabled");
 
 	s5k4ca->streaming = enable;
 	return 0;
@@ -1250,7 +1274,7 @@ static int s5k4ca_s_stream(struct v4l2_subdev *sd, int on)
 	mutex_lock(&s5k4ca->lock);
 
 	if (s5k4ca->streaming == !on) {
-		if (!ret && s5k4ca->apply_cfg)
+		if (on && s5k4ca->apply_cfg)
 			ret = s5k4ca_apply_cfg(s5k4ca);
 		if (!ret)
 			ret = s5k4ca_stream(s5k4ca, !!on);
@@ -1297,6 +1321,80 @@ static const struct v4l2_subdev_internal_ops s5k4ca_subdev_internal_ops = {
  * V4L2 I2C driver
  */
 
+static const char * const s5k4ca_wb_presets[] = {
+	"Sunny",
+	"Cloudy",
+	"Tungsten",
+	"Fluorescent",
+};
+
+static const char * const s5k4ca_iso_presets[] = {
+	"Auto",
+	"ISO 50",
+	"ISO 100",
+	"ISO 200",
+	"ISO 400",
+};
+
+static const char * const s5k4ca_photometry_modes[] = {
+	"Center",
+	"Spot",
+	"Matrix",
+};
+
+static const struct v4l2_ctrl_config s5k4ca_ctrls[] = {
+	{
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_S5K4CA_WB_PRESET,
+		.type	= V4L2_CTRL_TYPE_MENU,
+		.name	= "White balance preset",
+		.min	= 0,
+		.max	= ARRAY_SIZE(s5k4ca_wb_presets) - 1,
+		.def	= 0,
+		.qmenu	= s5k4ca_wb_presets,
+	}, {
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_S5K4CA_ISO,
+		.type	= V4L2_CTRL_TYPE_MENU,
+		.name	= "ISO preset",
+		.min	= 0,
+		.max	= ARRAY_SIZE(s5k4ca_iso_presets) - 1,
+		.def	= 0,
+		.qmenu	= s5k4ca_iso_presets,
+	}, {
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_S5K4CA_METERING,
+		.type	= V4L2_CTRL_TYPE_MENU,
+		.name	= "Photometry",
+		.min	= 0,
+		.max	= ARRAY_SIZE(s5k4ca_photometry_modes) - 1,
+		.def	= 0,
+		.qmenu	= s5k4ca_photometry_modes,
+	}, {
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_S5K4CA_FRAME_RATE,
+		.type	= V4L2_CTRL_TYPE_INTEGER,
+		.name	= "Frame rate",
+		.min	= 0,
+		.max	= 30,
+		.def	= 0,
+		.step	= 1,
+	}, {
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_S5K4CA_CAPTURE,
+		.type	= V4L2_CTRL_TYPE_BOOLEAN,
+		.name	= "Capture mode",
+		.min	= 0,
+		.max	= 1,
+		.def	= 0,
+	}, {
+		.ops	= &s5k4ca_ctrl_ops,
+		.id	= V4L2_CID_FOCUS_AUTO,
+		.type	= V4L2_CTRL_TYPE_BUTTON,
+		.name	= "Run auto focus",
+	}
+};
+
 static int s5k4ca_initialize_ctrls(struct s5k4ca_state *state)
 {
 	const struct v4l2_ctrl_ops *ops = &s5k4ca_ctrl_ops;
@@ -1310,7 +1408,29 @@ static int s5k4ca_initialize_ctrls(struct s5k4ca_state *state)
 	if (ret)
 		return ret;
 
-	/* TODO: Setup controls here */
+	ctrls->auto_wb = v4l2_ctrl_new_std(hdl, ops,
+			V4L2_CID_AUTO_WHITE_BALANCE, 0, 1, 1, 1);
+	ctrls->wb_preset = v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[0], NULL);
+	v4l2_ctrl_auto_cluster(2, &ctrls->auto_wb, 0, false);
+
+	v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[1], NULL);
+	v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[2], NULL);
+	v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[3], NULL);
+	v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[4], NULL);
+
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_BRIGHTNESS, -4, 4, 1, 0);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_CONTRAST, -2, 2, 1, 0);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_SATURATION, -2, 2, 1, 0);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_SHARPNESS, -2, 2, 1, 0);
+
+	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_EXPOSURE_AUTO,
+				V4L2_EXPOSURE_MANUAL, 0, V4L2_EXPOSURE_AUTO);
+
+	v4l2_ctrl_new_custom(hdl, &s5k4ca_ctrls[5], NULL);
+	v4l2_ctrl_new_std(hdl, ops, V4L2_CID_FOCUS_ABSOLUTE, -1, 1, 1, 0);
+
+	v4l2_ctrl_new_std_menu(hdl, ops, V4L2_CID_COLORFX,
+			       V4L2_COLORFX_SKY_BLUE, ~0x6f, V4L2_COLORFX_NONE);
 
 	if (hdl->error) {
 		ret = hdl->error;
@@ -1354,7 +1474,7 @@ static int s5k4ca_probe(struct i2c_client *client,
 	state->pdata = pdata;
 
 	sd = &state->sd;
-	strcpy(sd->name, S5K4CA_DRIVER_NAME);
+	strcpy(sd->name, "s5k4ca");
 
 	v4l2_i2c_subdev_init(sd, client, &s5k4ca_ops);
 
@@ -1398,14 +1518,14 @@ static int s5k4ca_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id s5k4ca_id[] = {
-	{ S5K4CA_DRIVER_NAME, 0 },
+	{ "s5k4ca", 0 },
 	{ },
 };
 MODULE_DEVICE_TABLE(i2c, s5k4ca_id);
 
 static struct i2c_driver s5k4ca_i2c_driver = {
 	.driver = {
-		.name = S5K4CA_DRIVER_NAME,
+		.name = "s5k4ca",
 	},
 	.probe		= s5k4ca_probe,
 	.remove		= s5k4ca_remove,

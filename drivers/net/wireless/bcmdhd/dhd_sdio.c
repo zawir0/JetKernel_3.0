@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_sdio.c 325395 2012-04-03 03:57:43Z $
+ * $Id: dhd_sdio.c 326662 2012-04-10 06:38:08Z $
  */
 
 #include <typedefs.h>
@@ -1481,9 +1481,9 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 		dhd_os_sdunlock(bus->dhd);
 #endif /* DHD_DEBUG */
 	} else if (pending == TRUE) {
-		/* possibly fw hangs so never responsed back */
-		DHD_ERROR(("%s: pending or timeout \n", __FUNCTION__));
-		return -ETIMEDOUT;
+		/* signal pending */
+		DHD_ERROR(("%s: signal pending\n", __FUNCTION__));
+		return -EINTR;
 	} else {
 		DHD_CTL(("%s: resumed for unknown reason?\n", __FUNCTION__));
 #ifdef DHD_DEBUG
@@ -3124,9 +3124,9 @@ dhd_bus_init(dhd_pub_t *dhdp, bool enforce_mutex)
 	dhd_timeout_start(&tmo, DHD_WAIT_F2RDY * 1000);
 
 	ready = 0;
-	while (ready != enable && !dhd_timeout_expired(&tmo))
-	        ready = bcmsdh_cfg_read(bus->sdh, SDIO_FUNC_0, SDIOD_CCCR_IORDY, NULL);
-
+	do {
+		ready = bcmsdh_cfg_read(bus->sdh, SDIO_FUNC_0, SDIOD_CCCR_IORDY, NULL);
+	} while (ready != enable && !dhd_timeout_expired(&tmo));
 
 	DHD_INFO(("%s: enable 0x%02x, ready 0x%02x (waited %uus)\n",
 	          __FUNCTION__, enable, ready, tmo.elapsed));
@@ -4616,8 +4616,7 @@ clkwait:
 		int ret, i;
 		uint8* frame_seq = bus->ctrl_frame_buf + SDPCM_FRAMETAG_LEN;
 
-		if (((bus->sih->chip == BCM4329_CHIP_ID) ||   /* limit to 4329 & 4330 for now  */
-			 (bus->sih->chip == BCM4330_CHIP_ID)) && (*frame_seq != bus->tx_seq)) {
+		if (*frame_seq != bus->tx_seq) {
 			DHD_INFO(("%s IOCTL frame seq lag detected!"
 				" frm_seq:%d != bus->tx_seq:%d, corrected\n",
 				__FUNCTION__, *frame_seq, bus->tx_seq));

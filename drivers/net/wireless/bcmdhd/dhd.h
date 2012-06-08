@@ -24,11 +24,12 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd.h 325862 2012-04-04 22:59:48Z $
+ * $Id: dhd.h 333052 2012-05-12 02:09:28Z $
  */
 
-
-
+/****************
+ * Common types *
+ */
 
 #ifndef _dhd_h_
 #define _dhd_h_
@@ -50,6 +51,7 @@
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_HAS_WAKELOCK)
 #include <linux/wakelock.h>
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined (CONFIG_HAS_WAKELOCK) */
+
 /* The kernel threading is sdio-specific */
 struct task_struct;
 struct sched_param;
@@ -89,6 +91,9 @@ enum dhd_bus_state {
 
 #define DHD_SCAN_ACTIVE_TIME	 40 /* ms : Embedded default Active setting from DHD Driver */
 #define DHD_SCAN_PASSIVE_TIME	130 /* ms: Embedded default Passive setting from DHD Driver */
+
+#define DHD_BEACON_TIMEOUT_NORMAL	4
+#define DHD_BEACON_TIMEOUT_HIGH		10
 
 enum dhd_bus_wake_state {
 	WAKE_LOCK_OFF,
@@ -432,10 +437,14 @@ extern int dhd_pno_enable(dhd_pub_t *dhd, int pfn_enabled);
 extern int dhd_pno_clean(dhd_pub_t *dhd);
 extern int dhd_pno_set(dhd_pub_t *dhd, wlc_ssid_t* ssids_local, int nssid,
                        ushort  scan_fr, int pno_repeat, int pno_freq_expo_max);
+extern int dhd_pno_set_ex(dhd_pub_t *dhd, wl_pfn_t* ssidnet, int nssid,
+				ushort pno_interval, int pno_repeat, int pno_expo_max, int pno_lost_time);
 extern int dhd_pno_get_status(dhd_pub_t *dhd);
 extern int dhd_dev_pno_reset(struct net_device *dev);
 extern int dhd_dev_pno_set(struct net_device *dev, wlc_ssid_t* ssids_local,
                            int nssid, ushort  scan_fr, int pno_repeat, int pno_freq_expo_max);
+extern int dhd_dev_pno_set_ex(struct net_device *dev, wl_pfn_t* ssidnet, int nssid,
+				ushort	pno_interval, int pno_repeat, int pno_expo_max, int pno_lost_time);
 extern int dhd_dev_pno_enable(struct net_device *dev,  int pfn_enabled);
 extern int dhd_dev_get_pno_status(struct net_device *dev);
 #endif /* PNO_SUPPORT */
@@ -445,6 +454,7 @@ extern int dhd_dev_get_pno_status(struct net_device *dev);
 #define DHD_MULTICAST4_FILTER_NUM	2
 #define DHD_MULTICAST6_FILTER_NUM	3
 #define DHD_MDNS_FILTER_NUM		4
+extern int dhd_os_set_packet_filter(dhd_pub_t *dhdp, int val);
 extern int net_os_set_packet_filter(struct net_device *dev, int val);
 extern int net_os_rxfilter_add_remove(struct net_device *dev, int val, int num);
 
