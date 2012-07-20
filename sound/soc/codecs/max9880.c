@@ -1,14 +1,15 @@
 /*
- * max9880.c -- MAX9880 ALSA SoC Audio driver
+ * max9880.c
+ * MAX9880 i2s audio codec driver
  *
- * Copyright 2009 Maxim Integrated Products
+ * Copyright (C) 2012 KB_JetDroid <kbjetdroid@gmail.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * Created based on ak4671.c by Tomasz Figa <tomasz.figa at gmail.com>
  *
- *  Revision history
- *    2010/11/11   vaclavpe@gmail.com - Support of 2.6.29 kernel for Samsung Jet - version 0.12
+ * This program is free software; you can redistribute  it and/or modify it
+ * under  the terms of  the GNU General  Public License as published by the
+ * Free Software Foundation;  either version 2 of the  License, or (at your
+ * option) any later version.
  *
  */
 
@@ -19,7 +20,6 @@
 #include <linux/pm.h>
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
-//#include <sound/driver.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -27,12 +27,18 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 
+#include <linux/slab.h>
+#include <linux/gpio.h>
+#include <sound/tlv.h>
+
 #include "max9880.h"
 
 #define AUDIO_NAME "max9880"
-#define MAX9880_VERSION "0.12" 
+#define MAX9880_VERSION "0.11" 
 
-#define MAX9880_DEBUG
+#undef MAX9880_DEBUG
+
+#define MAX9880_XTAL 1
 
 #ifdef MAX9880_DEBUG
 	#define dbg(format, arg...) \
@@ -50,7 +56,7 @@
 #define warn(format, arg...) \
 	printk(KERN_WARNING AUDIO_NAME ": " format "\n" , ## arg)
 
-#define MAX9880_TRACE
+#undef MAX9880_TRACE
 
 #ifdef MAX9880_TRACE
 #define trace(format, arg...) \
@@ -62,103 +68,58 @@
 /* Keep track of device revision ID */
 unsigned char revision_id = 0x00;
 
+/* codec private data */
+struct max9880_priv {
+	enum snd_soc_control_type control_type;
+	void *control_data;
+};
 
 /*******************************************************************************
- * Read from MAX9880 register space
+ * MAX9880 register cache & default register settings
  ******************************************************************************/
-static unsigned int max9880_read(struct snd_soc_codec *codec, unsigned int reg)
-{
-	struct i2c_msg msg[2];
-	struct i2c_client *client;
-	u8 data[2];
-	int ret;
-
-	client = (struct i2c_client *)codec->control_data;
-	data[0] = reg & 0xff;
-	msg[0].addr = client->addr;
-	msg[0].flags = 0;
-	msg[0].buf = &data[0];
-	msg[0].len = 1;
-
-	msg[1].addr = client->addr;
-	msg[1].flags = I2C_M_RD;
-	msg[1].buf = &data[1];
-	msg[1].len = 1;
-
-	ret = i2c_transfer(client->adapter, &msg[0], 2);
-
-#if 0
-	trace("%s", __FUNCTION__);
-	trace("   reg %#.4hx data %#.4hx", reg, data[1]);
-#endif
-
-	return (ret == 2) ? data[1] : -EIO;
-}
-
-
-/*******************************************************************************
- * Write to MAX9880 register space
- ******************************************************************************/
-static int max9880_write(struct snd_soc_codec *codec, unsigned int reg,	unsigned int value)
-{
-	u8 data[2];
-
-#if 0
-	trace("%s", __FUNCTION__);
-	trace("   reg %#.4hx data %#.4hx", reg, value);
-#endif
-
-	data[0] = reg & 0x00ff;
-	data[1] = value & 0x00ff;
-
-	if (codec->hw_write(codec->control_data, data, 2) == 2)
-		return 0;
-	else
-		return -EIO;
-}
-
-
-/*******************************************************************************
- * Power managment
- ******************************************************************************/
-static int max9880_dapm_event(struct snd_soc_codec *codec, int event)
-{
-	trace("%s %d\n", __FUNCTION__, event);
-
-	switch (event) {
-	case SNDRV_CTL_POWER_D0: /* full On */
-	case SNDRV_CTL_POWER_D1: /* partial On */
-	case SNDRV_CTL_POWER_D2: /* partial On */
-#ifdef MAX9880_XTAL
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x88);
-#else
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x84);
-#endif
-		break;
-
-	case SNDRV_CTL_POWER_D3hot: /* Off, with power */
-#ifdef MAX9880_XTAL
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x88);
-#else
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x84);
-#endif
-		break;
-
-	case SNDRV_CTL_POWER_D3cold: /* Off, without power */
-#ifdef MAX9880_XTAL
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x08);
-#else
-		max9880_write(codec, MAX9880_PM_SHUTDOWN, 0x00);
-#endif
-		break;
-
-	}
-
-	codec->dapm_state = event;
-
-	return 0;
-}
-
+/* max9880 register cache & default register settings */
+static const max9880_reg[MAX9880_CACHEREGNUM] = {
+	0x00, /* MAX9880_STATUS 			(0x00) */
+	0x00, /* MAX9880_JACK_STATUS 		(0x01) */
+	0x00, /* MAX9880_AUX_HIGH 			(0x02) */
+	0x00, /* MAX9880_AUX_LOW 			(0x03) */
+	0x00, /* MAX9880_INT_EN 			(0x04) */
+	0x10, /* MAX9880_SYS_CLK 			(0x05) */
+	0x80, /* MAX9880_DAI1_CLK_CTL_HIGH 	(0x06) */
+	0x00, /* MAX9880_DAI1_CLK_CTL_LOW 	(0x07) */
+	0x00, /* MAX9880_DAI1_MODE_A 		(0x08) */
+	0x00, /* MAX9880_DAI1_MODE_B 		(0x09) */
+	0x00, /* MAX9880_DAI1_TDM 			(0x0a) */
+	0x00, /* MAX9880_DAI2_CLK_CTL_HIGH 	(0x0b) */
+	0x00, /* MAX9880_DAI2_CLK_CTL_LOW 	(0x0c) */
+	0x00, /* MAX9880_DAI2_MODE_A 		(0x0d) */
+	0x00, /* MAX9880_DAI2_MODE_B 		(0x0e) */
+	0x00, /* MAX9880_DAI2_TDM 			(0x0f) */
+	0x00, /* MAX9880_DAC_MIXER 			(0x10) */
+	0x00, /* MAX9880_CODEC_FILTER 		(0x11) */
+	0x00, /* MAX9880_DSD_CONFIG 		(0x12) */
+	0x00, /* MAX9880_DSD_INPUT 			(0x13) */
+	0x00, /* MAX9880_REVISION_ID 		(0x14) */
+	0x00, /* MAX9880_SIDETONE 			(0x15) */
+	0x00, /* MAX9880_STEREO_DAC_LVL 	(0x16) */
+	0x00, /* MAX9880_VOICE_DAC_LVL 		(0x17) */
+	0x03, /* MAX9880_LEFT_ADC_LVL 		(0x18) */
+	0x03, /* MAX9880_RIGHT_ADC_LVL 		(0x19) */
+	0x0C, /* MAX9880_LEFT_LINE_IN_LVL 	(0x1a) */
+	0x0C, /* MAX9880_RIGHT_LINE_IN_LVL 	(0x1b) */
+	0x40, /* MAX9880_LEFT_VOL_LVL 		(0x1c) */
+	0x40, /* MAX9880_RIGHT_VOL_LVL 		(0x1d) */
+	0x00, /* MAX9880_LEFT_LINE_OUT_LVL 	(0x1e) */
+	0x00, /* MAX9880_RIGHT_LINE_OUT_LVL (0x1f) */
+	0x51, /* MAX9880_LEFT_MIC_GAIN 		(0x20) */
+	0x51, /* MAX9880_RIGHT_MIC_GAIN 	(0x21) */
+	0x00, /* MAX9880_INPUT_CONFIG 		(0x22) */
+	0x00, /* MAX9880_MIC_CONFIG 		(0x23) */
+	0x04, /* MAX9880_MODE_CONFIG 		(0x24) */
+	0x00, /* MAX9880_JACK_DETECT 		(0x25) */
+	0x00, /* MAX9880_PM_ENABLE 			(0x26) */
+	0x88, /* MAX9880_PM_SHUTDOWN 		(0x27) */
+};
 
 /*******************************************************************************
  * Get current input mixer setting.
@@ -170,9 +131,9 @@ static int max9880_input_mixer_get(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 
-	trace("%s\n", __FUNCTION__);
+	trace("%s", __FUNCTION__);
 
-	ucontrol->value.integer.value[0] = max9880_read(codec, MAX9880_INPUT_CONFIG) >> 6;
+	ucontrol->value.integer.value[0] = snd_soc_read(codec, MAX9880_INPUT_CONFIG) >> 4;
 
 	return 0;
 }
@@ -182,26 +143,20 @@ static int max9880_input_mixer_get(struct snd_kcontrol *kcontrol,
  * Configure input mixer
  *
  * Input mixer mapping
- *  0x00=none
- *  0x01=analog mic
- *  0x02=line in
- *  0x03=mic+line
+ *  0x01=Main Microphone
+ *  0x02=Ear Microphone
+ *  0x03=FM In
  *
- * Both channels are in the same register.
- * Left channel is shifted left 6 bits.
- * Right channel is shifted left 4 bits.
- *
- * Left channel is used to determine current setting.
  ******************************************************************************/
 static int max9880_input_mixer_set(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	u8 reg = max9880_read(codec, MAX9880_INPUT_CONFIG);
+	u8 reg = snd_soc_read(codec, MAX9880_INPUT_CONFIG);
 
-	trace("%s\n", __FUNCTION__);
+	trace("%s", __FUNCTION__);
 
-	if ((reg >> 6) == ucontrol->value.integer.value[0])
+	if ((reg >> 4) == ucontrol->value.integer.value[0])
 	{
 		return 0;
 	}
@@ -213,22 +168,22 @@ static int max9880_input_mixer_set(struct snd_kcontrol *kcontrol,
 		// VALUE index matches MAX9880_INPUT_MIXER enumeration
 		switch (ucontrol->value.integer.value[0])
 		{
-			case 0: // None
-				// Leave mux bits cleared
+			case 1: // Main Microphone
+				reg |= 0x40;
 				break;
-			case 1: // Analog Microphone
-				reg |= 0x50;
+			case 2: // Ear Microphone
+				reg |= 0x10;
 				break;
-			case 2: // Line In
+			case 3: // FM In
 				reg |= 0xa0;
 				break;
-			case 3: // Mic+Line
-				reg |= 0xf0;
+			default: // None
+				// Leave mux bits cleared
 				break;
 		}
 	}
 
-	max9880_write(codec, MAX9880_INPUT_CONFIG, reg);
+	snd_soc_write(codec, MAX9880_INPUT_CONFIG, reg);
 
 	return 1;
 }
@@ -238,7 +193,7 @@ static const char* max9880_filter_mode[] = {"IIR", "FIR"};
 static const char* max9880_hp_filter[] = {"None", "1", "2", "3", "4", "5"};
 static const char* max9880_sidetone_source[] = {"None", "Left ADC", "Right ADC", "L+R ADC"};
 
-static const char *max9880_input_mixer[] = {"None", "Analog Mic", "Line In", "Mic+Line"};
+static const char *max9880_input_mixer[] = {"None", "Main Mic", "Ear Mic", "FM In"};
 static const struct soc_enum max9880_input_mixer_enum[] = { 
 	SOC_ENUM_SINGLE_EXT(4, max9880_input_mixer),
 };
@@ -251,7 +206,96 @@ static const struct soc_enum max9880_enum[] = {
 	SOC_ENUM_SINGLE(MAX9880_SIDETONE, 6, 4, max9880_sidetone_source),
 };
 
+
+/*
+ * Playback volume control:
+ * from -81 to 9 dB in 2.3 dB steps (mute instead of -83 dB)
+ */
+static DECLARE_TLV_DB_SCALE(master_tlv, -8300, 230, 1);
+
+/*
+ * Line Out volume control:
+ * from -30 to 0 dB in 2 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(out1_tlv, -3000, 200, 0);
+
+/*
+ * Stereo DAC attenuation control:
+ * from -15 to 0 dB in 2 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(sdac_tlv, -1500, 100, 0);
+
+/*
+ * Voice DAC attenuation control:
+ * from -15 to 0 dB in 2 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(vdac_tlv, -1500, 100, 0);
+
+/*
+ * Voice DAC Gain control:
+ * from 0 to 18 dB in 6 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(dac_tlv, 0, 600, 0);
+
+/*
+ * ADC Gain control:
+ * from 0 to 18 dB in 6 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(adc_tlv, 0, 600, 0);
+
+/*
+ * ADC Level control:
+ * from -12 to 3 dB in 1 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(adc_lvl_tlv, -1200, 100, 0);
+
+/*
+ * Line In Gain control:
+ * from -6 to 24 dB in 2 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(line_in_tlv, -600, 200, 0);
+
+/*
+ * Mic Pre-Amp Gain control:
+ * from -15 to 30 dB in 15 dB steps (mute instead of -15 dB)
+ * -15 db doesn't exist but considered instead of 00=Disabled
+ */
+static DECLARE_TLV_DB_SCALE(mic_pre_tlv, -1500, 1500, 1);
+
+/*
+ * Mic Main-Amp Gain control:
+ * from 0 to 20 dB in 1 dB steps (no mute)
+ */
+static DECLARE_TLV_DB_SCALE(mic_amp_tlv, 0, 100, 0);
+
 static const struct snd_kcontrol_new max9880_snd_controls[] = {
+
+	/* Common playback gain controls */
+	// VOLL and VOLR
+	SOC_DOUBLE_R_TLV("Master Playback Volume", MAX9880_LEFT_VOL_LVL, MAX9880_RIGHT_VOL_LVL, 0, 0x20, 1, master_tlv),
+	// Line Output Gain
+	SOC_DOUBLE_R_TLV("Line Output Playback Volume", MAX9880_LEFT_LINE_OUT_LVL, MAX9880_RIGHT_LINE_OUT_LVL, 0, 0x0f, 1, out1_tlv),
+	// SDACA Attenuation
+	SOC_SINGLE_TLV("SDACA Attenuation", MAX9880_STEREO_DAC_LVL, 0, 0x0f, 1, sdac_tlv),
+	// VDACA Attenuation
+	SOC_SINGLE_TLV("VDACA Attenuation", MAX9880_VOICE_DAC_LVL, 0, 0x0f, 1, vdac_tlv),
+	// DAC Gain
+	SOC_SINGLE_TLV("DAC Gain", MAX9880_VOICE_DAC_LVL, 4, 0x03, 0, dac_tlv),
+
+	/* Common capture gain controls */
+	// ADC Gain
+	SOC_DOUBLE_R_TLV("ADC Gain", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 4, 0x03, 0, adc_tlv),
+	// ADC Level
+	SOC_DOUBLE_R_TLV("ADC Level", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 0, 0x0f, 1, adc_lvl_tlv),
+	// Line Input Gain
+	SOC_DOUBLE_R_TLV("Line Input Gain", MAX9880_LEFT_LINE_IN_LVL, MAX9880_RIGHT_LINE_IN_LVL, 0, 0x0f, 1, line_in_tlv),
+	// Microphone Pre-Amp
+	SOC_DOUBLE_R_TLV("Microphone Pre-Amp", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 5, 0x03, 0, mic_pre_tlv),
+	// Microphone PGA
+	SOC_DOUBLE_R_TLV("Microphone PGA", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 0, 0x14, 1, mic_amp_tlv),
+	// Input Mixer
+
+
 	// CODEC Filter MODE
 	SOC_ENUM("Filter Mode", max9880_enum[0]),
 	// ADC Filter
@@ -263,142 +307,330 @@ static const struct snd_kcontrol_new max9880_snd_controls[] = {
 	// Sidetone level
 	SOC_SINGLE("Sidetone Level", MAX9880_SIDETONE, 0, 31, 1),
 	// SDACA Attenuation
-	SOC_SINGLE("SDACA Attenuation", MAX9880_STEREO_DAC_LVL, 0, 15, 1),
+		//SOC_SINGLE("SDACA Attenuation", MAX9880_STEREO_DAC_LVL, 0, 15, 1),
 	// VDACA Attenuation
-	SOC_SINGLE("VDACA Attenuation", MAX9880_VOICE_DAC_LVL, 0, 15, 1),
+		//SOC_SINGLE("VDACA Attenuation", MAX9880_VOICE_DAC_LVL, 0, 15, 1),
 	// DAC Gain
-	SOC_SINGLE("DAC Gain", MAX9880_VOICE_DAC_LVL, 4, 3, 0),
+		//SOC_SINGLE("DAC Gain", MAX9880_VOICE_DAC_LVL, 4, 3, 0),
 	// ADC Gain
-	SOC_DOUBLE_R("ADC Gain", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 4, 3, 0),
+		//SOC_DOUBLE_R("ADC Gain", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 4, 3, 0),
 	// ADC Level
-	SOC_DOUBLE_R("ADC Level", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 0, 15, 1),
+		//SOC_DOUBLE_R("ADC Level", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 0, 15, 1),
 	// Line Input Gain
-	SOC_DOUBLE_R("Line Input Gain", MAX9880_LEFT_LINE_IN_LVL, MAX9880_RIGHT_LINE_IN_LVL, 0, 15, 1),
+		//SOC_DOUBLE_R("Line Input Gain", MAX9880_LEFT_LINE_IN_LVL, MAX9880_RIGHT_LINE_IN_LVL, 0, 15, 1),
 	// VOLL and VOLR
-	SOC_DOUBLE_R("Master Playback Volume", MAX9880_LEFT_VOL_LVL, MAX9880_RIGHT_VOL_LVL, 0, 63, 1),
+		//SOC_DOUBLE_R("Master Playback Volume", MAX9880_LEFT_VOL_LVL, MAX9880_RIGHT_VOL_LVL, 0, 63, 1),
 	// Line Output Gain
-	SOC_DOUBLE_R("Line Output Gain", MAX9880_LEFT_LINE_OUT_LVL, MAX9880_RIGHT_LINE_OUT_LVL, 0, 15, 1),
+		//SOC_DOUBLE_R("Line Output Gain", MAX9880_LEFT_LINE_OUT_LVL, MAX9880_RIGHT_LINE_OUT_LVL, 0, 15, 1),
 	// Microphone Pre-Amp
-	SOC_DOUBLE_R("Microphone Pre-Amp", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 5, 3, 1),
+		//SOC_DOUBLE_R("Microphone Pre-Amp", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 5, 3, 1),
 	// Microphone PGA
-	SOC_DOUBLE_R("Microphone PGA", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 0, 31, 1),
+		//SOC_DOUBLE_R("Microphone PGA", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 0, 31, 1),
 	// Input Mixer
   SOC_ENUM_EXT("Input Mixer", max9880_input_mixer_enum , max9880_input_mixer_get, max9880_input_mixer_set),
 };
 
-
-/*******************************************************************************
- * Add non dapm controls 
- ******************************************************************************/
-static int max9880_add_controls(struct snd_soc_codec *codec)
-{
-	int err, i;
-
-	trace("%s\n", __FUNCTION__);
-
-	for (i = 0; i < ARRAY_SIZE(max9880_snd_controls); i++) {
-		if ((err = snd_ctl_add(codec->card,
-				snd_soc_cnew(&max9880_snd_controls[i],codec, NULL))) < 0)
-			return err;
-	}
-
-	return 0;
-}
-
-
 static const struct snd_soc_dapm_widget max9880_dapm_widgets[] = {
-	SND_SOC_DAPM_INPUT("LMICIN"),  // Analog microphone input
-	SND_SOC_DAPM_INPUT("RMICIN"),  // Analog microphone input
+	SND_SOC_DAPM_INPUT("MMICIN"),  // Analog microphone input
+	SND_SOC_DAPM_INPUT("EMICIN"),  // Analog microphone input
 	SND_SOC_DAPM_INPUT("LLINEIN"), // Line input
 	SND_SOC_DAPM_INPUT("RLINEIN"), // Line input
 
 	SND_SOC_DAPM_OUTPUT("LOUTP"), // Speaker output
 	SND_SOC_DAPM_OUTPUT("ROUTP"), // Speaker output
 	SND_SOC_DAPM_OUTPUT("LOUTL"), // Line output
-	SND_SOC_DAPM_OUTPUT("ROUTL"), // Line output
+	SND_SOC_DAPM_OUTPUT("LOUTR"), // Line output
 
-	SND_SOC_DAPM_ADC("LADC", "HiFi Capture", SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_ADC("RADC", "HiFi Capture", SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_ADC("LADC", "HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
+	SND_SOC_DAPM_ADC("RADC", "HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
 
 	SND_SOC_DAPM_MIXER("Input Mixer", SND_SOC_NOPM, 0, 0, NULL, 0), 
+	SND_SOC_DAPM_MIXER("Output Mixer", SND_SOC_NOPM, 0, 0, NULL, 0),
 
-	SND_SOC_DAPM_DAC("LDAC", "HiFi Playback", SND_SOC_NOPM, 0, 0),
-	SND_SOC_DAPM_DAC("RDAC", "HiFi Playback", SND_SOC_NOPM, 0, 0),
+	SND_SOC_DAPM_DAC("LDAC", "HiFi Playback", MAX9880_PM_ENABLE, 3, 0),
+	SND_SOC_DAPM_DAC("RDAC", "HiFi Playback", MAX9880_PM_ENABLE, 2, 0),
+
+	SND_SOC_DAPM_AIF_OUT("LLOUT", "HiFi Playback", 0, MAX9880_PM_ENABLE, 5, 0),
+	SND_SOC_DAPM_AIF_OUT("RLOUT", "HiFi Playback", 0, MAX9880_PM_ENABLE, 4, 0),
 };
 
-static const struct snd_soc_dapm_route intercon[] = {
+static const struct snd_soc_dapm_route max9880_intercon[] = {
 	/* Inputs */
-	{"Mic Input", NULL, "LMICIN"},
-	{"Mic Input", NULL, "RMICIN"},
-	{"Line Input", NULL, "LLINEIN"},
-	{"Line Input", NULL, "RLINEIN"},
+	//{"Mic Input", NULL, "LMICIN"},
+	//{"Mic Input", NULL, "RMICIN"},
+	//{"Line Input", NULL, "LLINEIN"},
+	//{"Line Input", NULL, "RLINEIN"},
+	{"Input Mixer", NULL, "MMICIN"},
+	{"Input Mixer", NULL, "EMICIN"},
+	{"Output Mixer", NULL, "LLINEIN"},
+	{"Output Mixer", NULL, "RLINEIN"},
 
 	/* Outputs */
 	{"LOUTP", NULL, "Output Mixer"}, // Speaker output
 	{"ROUTP", NULL, "Output Mixer"}, // Speaker output
-	{"LOUTL", NULL, "Output Mixer"}, // Line output
-	{"ROUTL", NULL, "Output Mixer"}, // Line output
+	{"LOUTL", "LLOUT", "Output Mixer"}, // Line output
+	{"LOUTR", "RLOUT", "Output Mixer"}, // Line output
 
 	/* Input mixer */
-	{"Input Mixer", NULL, "Line Input"},
-	{"Input Mixer", NULL, "Mic Input"},
+	//{"Input Mixer", NULL, "Line Input"},
+	//{"Input Mixer", NULL, "Mic Input"},
 
 	/* ADC */
-	{"LDAC", NULL, "Input Mixer"},
-	{"RDAC", NULL, "Input Mixer"},
+	{"LADC", NULL, "Input Mixer"},
+	{"RADC", NULL, "Input Mixer"},
 
 	/* Output mixer */
-	{"Output Mixer", NULL, "Line Input"},
+	//{"Output Mixer", NULL, "Line Input"},
 	{"Output Mixer", NULL, "LDAC"},
 	{"Output Mixer", NULL, "RDAC"},
 
 	/* TERMINATOR */
-	{NULL, NULL, NULL},
+	//{NULL, NULL, NULL},
 };
 
-
-/*******************************************************************************
- * Add control widgets
- ******************************************************************************/
-static int max9880_add_widgets(struct snd_soc_codec *codec)
+static int max9880_hw_params(struct snd_pcm_substream *substream,
+		struct snd_pcm_hw_params *params,
+		struct snd_soc_dai *dai)
 {
-	int i;
+	struct snd_soc_codec *codec = dai->codec;
+	u8 fs_high, fs_low, reg;
 
-	trace("%s\n", __FUNCTION__);
+	fs_high = snd_soc_read(codec, MAX9880_DAI1_CLK_CTL_HIGH);
+	fs_low = snd_soc_read(codec, MAX9880_DAI1_CLK_CTL_LOW);
+	fs_high &= ~MAX9880_NI1_HIGH;
+	fs_low &= ~MAX9880_NI1_LOW;
 
-	for(i = 0; i < ARRAY_SIZE(max9880_dapm_widgets); i++) {
-		snd_soc_dapm_new_control(codec, &max9880_dapm_widgets[i]);
+	switch (params_rate(params)) {
+	case 8000:
+		fs_high |= MAX9880_NI1_HIGH_8KHZ;
+		fs_low |= MAX9880_NI1_LOW_8KHZ;
+		break;
+	case 11025:
+		fs_high |= MAX9880_NI1_HIGH_11_025KHZ;
+		fs_low |= MAX9880_NI1_LOW_11_025KHZ;
+		break;
+	case 12000:
+		fs_high |= MAX9880_NI1_HIGH_12KHZ;
+		fs_low |= MAX9880_NI1_LOW_12KHZ;
+		break;
+	case 16000:
+		fs_high |= MAX9880_NI1_HIGH_16KHZ;
+		fs_low |= MAX9880_NI1_LOW_16KHZ;
+		break;
+	case 22050:
+		fs_high |= MAX9880_NI1_HIGH_22_05KHZ;
+		fs_low |= MAX9880_NI1_LOW_22_05KHZ;
+		break;
+	case 24000:
+		fs_high |= MAX9880_NI1_HIGH_24KHZ;
+		fs_low |= MAX9880_NI1_LOW_24KHZ;
+		break;
+	case 32000:
+		fs_high |= MAX9880_NI1_HIGH_32KHZ;
+		fs_low |= MAX9880_NI1_LOW_32KHZ;
+		break;
+	case 44100:
+		fs_high |= MAX9880_NI1_HIGH_44_1KHZ;
+		fs_low |= MAX9880_NI1_LOW_44_1KHZ;
+		break;
+	case 48000:
+		fs_high |= MAX9880_NI1_HIGH_48KHZ;
+		fs_low |= MAX9880_NI1_LOW_48KHZ;
+		break;
+	default:
+		return -EINVAL;
 	}
 
-	/* Setup audio path interconnects */
-	snd_soc_dapm_add_routes(codec, intercon, ARRAY_SIZE(intercon));
+	snd_soc_write(codec, MAX9880_DAI1_CLK_CTL_HIGH, fs_high);
+	snd_soc_write(codec, MAX9880_DAI1_CLK_CTL_LOW, fs_low);
 
-	snd_soc_dapm_new_widgets(codec);
-	return 0;
-}
+// Misc register setting
+// TODO: Move these register settings to appropriate widgets if possible
 
+	reg = snd_soc_read(codec, MAX9880_DAI1_MODE_B);
+	reg &= ~MAX9880_BSEL1;
+	reg |= MAX9880_SDOEN1;
+	reg |= MAX9880_SDIEN1;
+	reg |= MAX9880_BSEL1_48xLRCLK;
+	snd_soc_write(codec, MAX9880_DAI1_MODE_B, reg);
 
-#if 0
-/*******************************************************************************
- * Not required - left in place for later reference
- ******************************************************************************/
-static int max9880_pcm_prepare(struct snd_pcm_substream *substream)
-{
-	trace("%s %d\n", __FUNCTION__, substream->stream);
-
-	return 0;
-}
-
-
-/*******************************************************************************
- * Not required - left in place for later reference
- ******************************************************************************/
-static void max9880_shutdown(struct snd_pcm_substream *substream)
-{
-	trace("%s", __FUNCTION__);
-}
+#if 1
+	snd_soc_write(codec, MAX9880_DAI1_TDM,
+						(0 << 6) | // STOTL
+						(1 << 4) | // STOTR
+						(0 << 0)); // STOTDLY
 #endif
 
+	reg = snd_soc_read(codec, MAX9880_DAC_MIXER);
+	reg &= ~MAX9880_MIXDAL;
+	reg |= MAX9880_MIXDAL_DAI1_L;
+	reg &= ~MAX9880_MIXDAR;
+	reg |= MAX9880_MIXDAR_DAI1_R;
+	snd_soc_write(codec, MAX9880_DAC_MIXER, reg);
+
+	// voice/audio filter
+	reg = snd_soc_read(codec, MAX9880_CODEC_FILTER);
+	reg &= ~(0xff);
+	reg |= MAX9880_MODE_FIR;
+	snd_soc_write(codec, MAX9880_CODEC_FILTER, reg);
+
+
+	// side tone off
+	reg = snd_soc_read(codec, MAX9880_SIDETONE);
+	reg &= ~(0xff);
+	reg |= MAX9880_DSTS_NO_ST;
+	snd_soc_write(codec, MAX9880_SIDETONE, reg);
+
+	// DAC levels
+	snd_soc_write(codec, MAX9880_STEREO_DAC_LVL, 0x00);
+	snd_soc_write(codec, MAX9880_VOICE_DAC_LVL, 0x00);
+
+	// line in
+	snd_soc_write(codec, MAX9880_LEFT_LINE_IN_LVL, 0x00);
+	snd_soc_write(codec, MAX9880_RIGHT_LINE_IN_LVL, 0x00);
+
+	// DAC volume
+	snd_soc_write(codec, MAX9880_LEFT_VOL_LVL, 0x0C); //0x0d);
+	snd_soc_write(codec, MAX9880_RIGHT_VOL_LVL, 0x0C); //0x0d);
+
+	// line out
+	snd_soc_write(codec, MAX9880_LEFT_LINE_OUT_LVL, 0x00); //0x0f);
+	snd_soc_write(codec, MAX9880_RIGHT_LINE_OUT_LVL, 0x00); //0x0f);
+
+	// ADC gain
+	snd_soc_write(codec, MAX9880_LEFT_ADC_LVL, 0x09);
+	snd_soc_write(codec, MAX9880_RIGHT_ADC_LVL, 0x09);
+
+	// mode
+	reg = snd_soc_read(codec, MAX9880_MODE_CONFIG);
+	reg |= MAX9880_DLSEW_10MS;
+	reg |= MAX9880_VSEN_SLEW;
+	reg |= MAX9880_DZDEN_DIS;
+	reg &= ~MAX9880_HPMODE;
+	reg |= MAX9880_HPMODE_STEREO_CAPL;
+	snd_soc_write(codec, MAX9880_MODE_CONFIG, reg);
+
+	reg = snd_soc_read(codec, MAX9880_PM_ENABLE);
+	reg |= MAX9880_LOLEN;
+	reg |= MAX9880_LOREN;
+	snd_soc_write(codec, MAX9880_PM_ENABLE, reg);
+
+	return 0;
+}
+
+static int max9880_set_dai_sysclk(struct snd_soc_dai *dai, int clk_id,
+		unsigned int freq, int dir)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	u8 pll, power;
+
+	pll = snd_soc_read(codec, MAX9880_SYS_CLK);
+	power = snd_soc_read(codec, MAX9880_PM_SHUTDOWN);
+	pll &= ~MAX9880_PSCLK;
+
+#ifdef MAX9880_XTAL
+	pll &= ~MAX9880_FREQ;
+	power |= MAX9880_XTEN;
+#else
+	//Not required for Jet
+#endif
+	if (freq >= 10000000 && freq <= 20000000)
+		pll |= MAX9880_PSCLK_10MHZ_20MHZ;
+	else if (freq >= 20000000 && freq <= 40000000)
+		pll |= MAX9880_PSCLK_20MHZ_40MHZ;
+	else if (freq >= 40000000)
+		pll |= MAX9880_PSCLK_40MHZ;
+	else
+		pll |= MAX9880_PSCLK_DIS;
+
+	snd_soc_write(codec, MAX9880_SYS_CLK, pll);
+	snd_soc_write(codec, MAX9880_PM_SHUTDOWN, power);
+
+	return 0;
+}
+
+static int max9880_set_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	u8 mode;
+	u8 pll;
+
+	/* set master/slave audio interface */
+	mode = snd_soc_read(codec, MAX9880_DAI1_MODE_A);
+	pll = snd_soc_read(codec, MAX9880_SYS_CLK);
+
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	case SND_SOC_DAIFMT_CBM_CFM:
+		mode |= MAX9880_MAS1;
+		pll &= ~MAX9880_MAS1;
+		break;
+	case SND_SOC_DAIFMT_CBM_CFS:
+		mode |= MAX9880_MAS1;
+		pll |= MAX9880_PLL1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* interface format */
+	mode &= ~MAX9880_DIF;
+
+	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+	case SND_SOC_DAIFMT_I2S:
+		mode |= MAX9880_DIF_I2S_MODE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	/* set mode and format */
+	snd_soc_write(codec, MAX9880_DAI1_MODE_A, mode);
+	snd_soc_write(codec, MAX9880_SYS_CLK, pll);
+
+	return 0;
+}
+
+static int max9880_set_bias_level(struct snd_soc_codec *codec,
+		enum snd_soc_bias_level level)
+{
+	int ret;
+
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
+		break;
+	case SND_SOC_BIAS_STANDBY:
+		ret = snd_soc_cache_sync(codec);
+		if (ret) {
+			dev_err(codec->dev,
+				"Failed to sync cache: %d\n", ret);
+			return ret;
+		}
+		snd_soc_update_bits(codec, MAX9880_PM_SHUTDOWN,
+				MAX9880_SHUTDOWN, 0x80);
+		break;
+	case SND_SOC_BIAS_OFF:
+		snd_soc_update_bits(codec, MAX9880_PM_SHUTDOWN,
+				MAX9880_SHUTDOWN, 0x00);
+		codec->cache_sync = 1;
+		break;
+	}
+	codec->dapm.bias_level = level;
+	return 0;
+}
+
+static int max9880_hw_free(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	int ret;
+
+	ret = max9880_set_bias_level(codec, SND_SOC_BIAS_OFF);
+
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
 
 /*******************************************************************************
  * Volume control mute
@@ -407,10 +639,10 @@ static int max9880_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
 
-	u8 muteL = max9880_read(codec, MAX9880_LEFT_VOL_LVL) & 0x3f;
-	u8 muteR = max9880_read(codec, MAX9880_RIGHT_VOL_LVL) & 0x3f;
+	u8 muteL = snd_soc_read(codec, MAX9880_LEFT_VOL_LVL) & 0x3f;
+	u8 muteR = snd_soc_read(codec, MAX9880_RIGHT_VOL_LVL) & 0x3f;
 
-	trace("%s %s\n", __FUNCTION__, (mute) ? "muted" : "unmuted");
+	trace("%s %s", __FUNCTION__, (mute) ? "muted" : "unmuted");
 
 	if (mute)
 	{
@@ -418,12 +650,31 @@ static int max9880_mute(struct snd_soc_dai *dai, int mute)
 		muteR |= 0x40;
 	}
 
-	max9880_write(codec, MAX9880_LEFT_VOL_LVL, muteL);
-	max9880_write(codec, MAX9880_RIGHT_VOL_LVL, muteR);
+	snd_soc_write(codec, MAX9880_LEFT_VOL_LVL, muteL);
+	snd_soc_write(codec, MAX9880_RIGHT_VOL_LVL, muteR);
 
 	return 0;
 }
 
+static int max9880_suspend(struct snd_soc_codec *codec, pm_message_t state)
+{
+	max9880_set_bias_level(codec, SND_SOC_BIAS_OFF);
+	return 0;
+}
+
+static int max9880_resume(struct snd_soc_codec *codec)
+{
+	max9880_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	return 0;
+}
+
+static struct snd_soc_dai_ops max9880_dai_ops = {
+	.digital_mute = max9880_mute,
+	.hw_params	= max9880_hw_params,
+	.set_sysclk	= max9880_set_dai_sysclk,
+	.set_fmt	= max9880_set_dai_fmt,
+	.hw_free	= max9880_hw_free,
+};
 
 #define MAX9880_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_11025 |\
                        SNDRV_PCM_RATE_16000 | SNDRV_PCM_RATE_22050 |\
@@ -433,8 +684,8 @@ static int max9880_mute(struct snd_soc_dai *dai, int mute)
 
 #define MAX9880_FORMATS (SNDRV_PCM_FMTBIT_S16_LE)
 
-struct snd_soc_dai max9880_dai = {
-	.name = "MAX9880",
+struct snd_soc_dai_driver max9880_dai = {
+	.name = "max9880-hifi",
 	.playback = {
 		.stream_name = "Playback",
 		.channels_min = 1,
@@ -447,426 +698,118 @@ struct snd_soc_dai max9880_dai = {
 		.channels_max = 2,
 		.rates = MAX9880_RATES,
 		.formats = MAX9880_FORMATS,},
-	.ops = {
-#if 0
-		.prepare = max9880_pcm_prepare,
-		.shutdown = max9880_shutdown,
-#endif
-		.digital_mute = max9880_mute,
-	}
+	.ops = &max9880_dai_ops
 };
-EXPORT_SYMBOL_GPL(max9880_dai);
-
-
-/*******************************************************************************
- * Initialise device
- *
- * Register mixer and dsp interfaces with kernel
- ******************************************************************************/
-static int max9880_init(struct snd_soc_device *socdev)
-{
-	struct snd_soc_codec *codec = socdev->codec;
-	int ret = 0;
-
-	trace("%s", __FUNCTION__);
-
-	codec->name = "MAX9880";
-	codec->owner = THIS_MODULE;
-	codec->read = max9880_read;
-	codec->write = max9880_write;
-	//codec->dapm_event = max9880_dapm_event;
-	codec->dai = &max9880_dai;
-	codec->num_dai = 1;
-
-	/* register pcms */
-	ret = snd_soc_new_pcms(socdev, SNDRV_DEFAULT_IDX1, SNDRV_DEFAULT_STR1);
-	if (ret < 0) {
-		printk(KERN_ERR "max9880: failed to create pcms\n");
-		goto pcm_err;
-	}
-
-	/* Grab device revision ID */
-	revision_id = max9880_read(codec, MAX9880_REVISION_ID);
-
-	// Disable chip using DAPM event
-	max9880_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
-
-	// Enabling input and output
-	max9880_write(codec, MAX9880_DAI1_MODE_A,
-						(0 << 7) | // MAX
-						(0 << 6) | // MCI
-						(0 << 5) | // BCI
-						(1 << 4) | // DLY - Opposite of Littleton platform?
-						(0 << 3) | // HIZOFF1
-						(0 << 2) | // TDM
-						(0 << 1) | // FSW
-						(0 << 0)); // reserved
-
-	max9880_write(codec, MAX9880_DAI1_MODE_B, (revision_id == 0x41) ?
-						(0 << 6) | // SEL
-						(1 << 5) | // SDOEN
-						(1 << 4) | // SDIEN
-						(0 << 3) | // DMONO1
-						(0 << 0)   // BSEL
-						:
-						(1 << 6) | // SEL
-						(1 << 5) | // SDOEN
-						(1 << 4) | // SDIEN
-						(0 << 3) | // DMONO1
-						(0 << 0)); // BSEL
-
-	max9880_write(codec, MAX9880_DAI1_TDM,
-						(0 << 6) | // STOTL
-						(1 << 4) | // STOTR
-						(0 << 0)); // STOTDLY
-
-	// Select DAI 1 as source for DAC
-	max9880_write(codec, MAX9880_DAC_MIXER,
-						(1 << 7) | // DAI1 Left
-						(1 << 2)); // DAI1 Right
-
-#ifdef JACK_DETECT
-	max9880_write(codec, MAX9880_INT_EN, 0x02);
-#else
-	max9880_write(codec, MAX9880_INT_EN, 0x00);
-#endif
-
-	// Setup clock for slave mode using anyclock feature.
-	// Both the max9880 evkit and littleton platform provide a 13MHz clock
-	max9880_write(codec, MAX9880_SYS_CLK, 0x10);
-
-	// DAI1 uses PLL instead of NI divider
-	max9880_write(codec, MAX9880_DAI1_CLK_CTL_HIGH, 0x80);
-	max9880_write(codec, MAX9880_DAI1_CLK_CTL_LOW, 0x00);
-
-	// voice/audio filter
-	max9880_write(codec, MAX9880_CODEC_FILTER, 0x80);
-
-	// DSD not used
-	max9880_write(codec, MAX9880_DSD_CONFIG, 0x00);
-	max9880_write(codec, MAX9880_DSD_INPUT, 0x00);
-
-	// side tone off
-	max9880_write(codec, MAX9880_SIDETONE, 0x00);
-
-	// DAC levels
-	max9880_write(codec, MAX9880_STEREO_DAC_LVL, 0x0f);
-	max9880_write(codec, MAX9880_VOICE_DAC_LVL, 0x0f);
-
-	// line in
-	max9880_write(codec, MAX9880_LEFT_LINE_IN_LVL, 0x00);
-	max9880_write(codec, MAX9880_RIGHT_LINE_IN_LVL, 0x00);
-
-	// DAC volume
-	max9880_write(codec, MAX9880_LEFT_VOL_LVL, 0x0d);
-	max9880_write(codec, MAX9880_RIGHT_VOL_LVL, 0x0d);
-
-	// line out
-	max9880_write(codec, MAX9880_LEFT_LINE_OUT_LVL, 0x0f);
-	max9880_write(codec, MAX9880_RIGHT_LINE_OUT_LVL, 0x0f);
-
-	// ADC gain
-	max9880_write(codec, MAX9880_LEFT_ADC_LVL, 0x03);
-	max9880_write(codec, MAX9880_RIGHT_ADC_LVL, 0x03);
-
-	// ADC mixer configuration
-	max9880_write(codec, MAX9880_INPUT_CONFIG,
-		(2 << 6) | // MXINL : 0=mute, 1=mic, 2=line, 3=mic+line
-		(2 << 4) | // MXINR : 0=mute, 1=mic, 2=line, 3=mic+line
-		(0 << 3) | // AUXCAP
-		(0 << 2) | // AUXGAIN : 0=normal, 1=gain calibration mode
-		(0 << 1) | // AUXCAL : 0=normal, 1=offset calibration mode
-		(0 << 0)); // AUXEN : 0=JACKSNS/AUXIN
-
-	// mode
-	max9880_write(codec, MAX9880_MODE_CONFIG,
-		(0 << 7) | // DSLEW : 0=10ms, 1=80ms
-		(0 << 6) | // VSEN : 0=bypass intermediate, 1=step through
-		(0 << 5) | // ZDEN : 0=change at zero cross, 1=change immediate
-		(1 << 4) | // DZDEN : 0=change immediate, 1=near zero cross
-		(4 << 0)); // SPMODE
-
-#ifdef JACK_DETECT
-	max9880_write(codec, MAX9880_JACK_DETECT, 0x80);
-#else
-	max9880_write(codec, MAX9880_JACK_DETECT, 0x00);
-#endif
-
-	// Enable circuitry based on application
-	max9880_write(codec, MAX9880_PM_ENABLE,
-		(1 << 7) | // LNLEN : Left-Line Input Enable
-		(1 << 6) | // LNREN : Right-Line Input Enable
-		(1 << 5) | // LOLEN : Left-Line Output Enable
-		(1 << 4) | // LOREN : Right-Line Output Enable
-		(1 << 3) | // DALEN : Left DAC Enable
-		(1 << 2) | // DAREN : Right DAC Enable
-		(1 << 1) | // ADLEN : Left ADC Enable
-		(1 << 0)); // ADREN : Right ADC Enable
-
-	// enable chip using DAPM event
-	max9880_dapm_event(codec, SNDRV_CTL_POWER_D0);
-
-	max9880_add_widgets(codec);
-	max9880_add_controls(codec);
-
-	ret = snd_soc_init_card(socdev);
-	if (ret < 0) {
-		printk(KERN_ERR "max9880: failed to register card\n");
-		goto card_err;
-	}
-
-	return ret;
-
-card_err:
-	snd_soc_free_pcms(socdev);
-	snd_soc_dapm_free(socdev);
-pcm_err:
-
-	return ret;
-}
-
-
-static struct snd_soc_device *max9880_socdev;
-
-
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
-
-static unsigned short ignore_i2c_addr[] = { I2C_CLIENT_END };
-static unsigned short normal_i2c_addr[] = {5, I2C_CLIENT_END};
-static unsigned short probe_i2c_addr[] = { I2C_CLIENT_END };
-
-static struct i2c_client_address_data max9880_addr_data = {
-   .normal_i2c     = normal_i2c_addr,
-   .probe          = probe_i2c_addr,
-   .ignore         = ignore_i2c_addr,
-};
-
-/* Required I2C client boiler plate */
-/* I2C_CLIENT_INSMOD; */
-
-static struct i2c_driver max9880_i2c_driver;
-static struct i2c_client client_template;
-
-/* If the i2c layer weren't so broken, we could pass this kind of data
-   around */
-
-/*******************************************************************************
- * Probe for an attched MAX9880 and initialize it if found.
- ******************************************************************************/
-static int max9880_codec_probe(struct i2c_adapter *adap, int addr, int kind)
-{
-	struct snd_soc_device *socdev = max9880_socdev;
-	struct max9880_setup_data *setup = socdev->codec_data;
-	struct snd_soc_codec *codec = socdev->codec;
-	struct i2c_client *i2c;
-	int ret;
-
-	printk("%s - max9880 found\n", __FUNCTION__);
-
-	if (addr != setup->i2c_address)
-		return -ENODEV;
-
-	client_template.adapter = adap;
-	client_template.addr = addr;
-
-	i2c = kmemdup(&client_template, sizeof(client_template), GFP_KERNEL);
-	if (i2c == NULL) {
-		kfree(codec);
-		return -ENOMEM;
-	}
-	i2c_set_clientdata(i2c, codec);
-	codec->control_data = i2c;
-
-	ret = i2c_attach_client(i2c);
-	if (ret < 0) {
-		err("%s: failed to attach codec at addr %x\n", __FUNCTION__, addr);
-		goto err;
-	}
-
-	ret = max9880_init(socdev);
-	if (ret < 0) {
-		err("%s: failed to initialise MAX9880\n", __FUNCTION__);
-		goto err;
-	}
-	return ret;
-
-err:
-	kfree(codec);
-	kfree(i2c);
-	return ret;
-}
-
-
-/*******************************************************************************
- * Release any resources allocated during attach
- ******************************************************************************/
-static int max9880_i2c_detach(struct i2c_client *client)
-{
-	struct snd_soc_codec* codec = i2c_get_clientdata(client);
-
-	i2c_detach_client(client);
-	kfree(codec->reg_cache);
-	kfree(client);
-	return 0;
-}
-
-
-/*******************************************************************************
- * Probe for an attached MAX9880
- ******************************************************************************/
-static int max9880_i2c_attach(struct i2c_adapter *adap)
-{
-	return i2c_probe(adap, &max9880_addr_data, max9880_codec_probe);
-}
-
-
-/*******************************************************************************
- * I2C codec control layer
- ******************************************************************************/
-static struct i2c_driver max9880_i2c_driver = {
-	.driver = {
-		.name = "MAX9880 Codec",
-		.owner = THIS_MODULE,
-	},
-	.attach_adapter = max9880_i2c_attach,
-	.detach_client =  max9880_i2c_detach,
-};
-
-static struct i2c_client client_template = {
-	.name =   "MAX9880",
-	.driver = &max9880_i2c_driver,
-};
-#endif
-
-
-/*******************************************************************************
- * Power down codec.
- *
- * Current register values would need to be saved is power is diconnected.
- ******************************************************************************/
-static int max9880_suspend(struct platform_device *pdev, pm_message_t state)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
-
-	trace("%s\n", __FUNCTION__);
-
-	/* power codec down */
-	max9880_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
-
-	return 0;
-}
-
-
-/*******************************************************************************
- * Power up codec.
- *
- * Register values need to be restored if power was actully diconnected
- * from it's supply.
- ******************************************************************************/
-static int max9880_resume(struct platform_device *pdev)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
-
-	trace("%s\n", __FUNCTION__);
-
-	max9880_dapm_event(codec, SNDRV_CTL_POWER_D3hot);
-	max9880_dapm_event(codec, codec->suspend_dapm_state);
-	return 0;	
-}
-
+//EXPORT_SYMBOL_GPL(max9880_dai);
 
 /*******************************************************************************
  * Make sure that a MAX9880 is attached to I2C bus.
  ******************************************************************************/
-static int max9880_probe(struct platform_device *pdev)
+static int max9880_probe(struct snd_soc_codec *codec)
 {
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct max9880_setup_data *setup;
-	struct snd_soc_codec *codec;
-	int ret = 0;
+	struct max9880_priv *max9880 = snd_soc_codec_get_drvdata(codec);
+	int ret;
 
-	printk("Maxim MAX9880 Audio CODEC %s\n", MAX9880_VERSION);
-
-	setup = socdev->codec_data;
-
-	codec = kzalloc(sizeof(struct snd_soc_codec), GFP_KERNEL);
-	if (codec == NULL)
-		return -ENOMEM;
-
-	socdev->codec = codec;
-	mutex_init(&codec->mutex);
-	INIT_LIST_HEAD(&codec->dapm_widgets);
-	INIT_LIST_HEAD(&codec->dapm_paths);
-
-	max9880_socdev = socdev;
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
-	if (setup->i2c_address) {
-	  printk("%s assign i2c address 0x%02X", __FUNCTION__, setup->i2c_address);
-		normal_i2c_addr[0] = setup->i2c_address;
-		codec->hw_write = (hw_write_t)i2c_master_send;
-		codec->hw_read = (hw_read_t)i2c_master_recv;
-		ret = i2c_add_driver(&max9880_i2c_driver);
-		if (ret != 0)
-			printk(KERN_ERR "can't add i2c driver");
+	ret = snd_soc_codec_set_cache_io(codec, 8, 8, max9880->control_type);
+	if (ret < 0) {
+		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
+		return ret;
 	}
-#else
-	/* Add other interfaces here */
-	  printk("%s NO I2C ??? Something goes bad...\n", __FUNCTION__);
-#endif
 
-	return ret;
-}
-
-
-/*******************************************************************************
- * Driver is being unloaded, power down codec and free allocated resources.
- ******************************************************************************/
-static int max9880_remove(struct platform_device *pdev)
-{
-	struct snd_soc_device *socdev = platform_get_drvdata(pdev);
-	struct snd_soc_codec *codec = socdev->codec;
-
-	trace("%s", __FUNCTION__);
-
-	if (codec->control_data)
-		max9880_dapm_event(codec, SNDRV_CTL_POWER_D3cold);
-
-	snd_soc_free_pcms(socdev);
-	snd_soc_dapm_free(socdev);
-
-#if defined (CONFIG_I2C) || defined (CONFIG_I2C_MODULE)
-	i2c_del_driver(&max9880_i2c_driver);
-#endif
-
-	kfree(codec);
+	max9880_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
 
 	return 0;
 }
 
+static int max9880_remove(struct snd_soc_codec *codec)
+{
+	max9880_set_bias_level(codec, SND_SOC_BIAS_OFF);
+	return 0;
+}
 
-struct snd_soc_codec_device soc_codec_dev_max9880 = {
+struct snd_soc_codec_driver soc_codec_dev_max9880 = {
 	.probe = max9880_probe,
 	.remove = max9880_remove,
 	.suspend = max9880_suspend,
 	.resume = max9880_resume,
+	.set_bias_level = max9880_set_bias_level,
+	.reg_cache_size = MAX9880_CACHEREGNUM,
+	.reg_word_size = sizeof(u8),
+	.reg_cache_default = max9880_reg,
+	.controls = max9880_snd_controls,
+	.num_controls = ARRAY_SIZE(max9880_snd_controls),
+	.dapm_widgets = max9880_dapm_widgets,
+	.num_dapm_widgets = ARRAY_SIZE(max9880_dapm_widgets),
+	.dapm_routes = max9880_intercon,
+	.num_dapm_routes = ARRAY_SIZE(max9880_intercon),
 };
 
-EXPORT_SYMBOL_GPL(soc_codec_dev_max9880);
+//EXPORT_SYMBOL_GPL(soc_codec_dev_max9880);
 
-static int __init max9880_codec_init(void)
+/*******************************************************************************
+ * I2C codec control layer
+ ******************************************************************************/
+static int __devinit max9880_i2c_probe(struct i2c_client *client,
+		const struct i2c_device_id *id)
 {
-	return snd_soc_register_dai(&max9880_dai);	
-}
-module_init(max9880_codec_init);
+	struct max9880_priv *max9880;
+	int ret;
 
-static void __exit max9880_codec_exit(void)
-{
-	snd_soc_unregister_dai(&max9880_dai);
+
+	max9880 = kzalloc(sizeof(struct max9880_priv), GFP_KERNEL);
+	if (max9880 == NULL)
+		return -ENOMEM;
+
+	i2c_set_clientdata(client, max9880);
+	max9880->control_data = client;
+	max9880->control_type = SND_SOC_I2C;
+
+	ret = snd_soc_register_codec(&client->dev,
+			&soc_codec_dev_max9880, &max9880_dai, 1);
+	if (ret < 0)
+		goto err;
+
+	return ret;
+err:
+	kfree(max9880);
+	return ret;
 }
-module_exit(max9880_codec_exit);
+
+static __devexit int max9880_i2c_remove(struct i2c_client *client)
+{
+	snd_soc_unregister_codec(&client->dev);
+	kfree(i2c_get_clientdata(client));
+	return 0;
+}
+
+static const struct i2c_device_id max9880_i2c_id[] = {
+	{ "max9880", 0 },
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, max9880_i2c_id);
+
+static struct i2c_driver max9880_i2c_driver = {
+	.driver = {
+		.name = "max9880-codec",
+		.owner = THIS_MODULE,
+	},
+	.probe = max9880_i2c_probe,
+	.remove = __devexit_p(max9880_i2c_remove),
+	.id_table = max9880_i2c_id,
+};
+
+static int __init max9880_modinit(void)
+{
+	return i2c_add_driver(&max9880_i2c_driver);
+}
+module_init(max9880_modinit);
+
+static void __exit max9880_exit(void)
+{
+	i2c_del_driver(&max9880_i2c_driver);
+}
+module_exit(max9880_exit);
 
 MODULE_DESCRIPTION("ASoC MAX9880 driver");
-MODULE_AUTHOR("Maxim Integrated Products");
+MODULE_AUTHOR("KB_JetDroid");
 MODULE_LICENSE("GPL");

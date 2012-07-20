@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
- * this file is based on spica-battery.c by 
+ * this file is based on spica-battery.c by
  * Tomasz Figa <tomasz.figa at gmail.com>, 
  */
 
@@ -38,7 +38,8 @@
 #include <linux/android_alarm.h>
 #include <linux/workqueue.h>
 
-#include <linux/power/spica_battery.h>
+#include <linux/power/jet_battery.h>
+#include <linux/i2c/max8906.h>
 
 #include <plat/adc.h>
 
@@ -110,7 +111,7 @@ static int lookup_value(struct lookup_data *data, int value)
 
 /* Creates interpolation table based on platform data */
 static int create_lookup_table(
-			const struct spica_battery_threshold *thresholds,
+			const struct jet_battery_threshold *thresholds,
 			int threshold_count, struct lookup_data *data)
 {
 	struct lookup_entry *entry;
@@ -186,12 +187,12 @@ static int put_sample_get_avg(struct average_data *avg, int sample)
  */
 
 /* Driver data */
-struct spica_battery {
+struct jet_battery {
 	struct power_supply		bat;
-	struct power_supply		psy[SPICA_BATTERY_NUM];
+	struct power_supply		psy[JET_BATTERY_NUM];
 
 	struct s3c_adc_client		*client;
-	struct spica_battery_pdata	*pdata;
+	struct jet_battery_pdata	*pdata;
 	struct work_struct		work;
 	struct workqueue_struct		*workqueue;
 	struct delayed_work		poll_work;
@@ -216,13 +217,13 @@ struct spica_battery {
 	int temp_adc;
 	int status;
 	int health;
-	int online[SPICA_BATTERY_NUM];
+	int online[JET_BATTERY_NUM];
 	int fault;
 	int chg_enable;
 	int compensation;
 	int compensation_flags;
 	int calibration;
-	enum spica_battery_supply supply;
+	enum jet_battery_supply supply;
 
 	unsigned int		interval;
 	struct average_data	volt_avg;
@@ -234,14 +235,14 @@ struct spica_battery {
 
 #ifdef CONFIG_RTC_INTF_ALARM
 /* Alarm handler */
-static void spica_battery_alarm(struct alarm *alarm)
+static void jet_battery_alarm(struct alarm *alarm)
 {
 	/* Nothing to do here */
 }
 #endif
 
 /* Battery fault handling */
-static void spica_battery_set_fault_enable(bool enable)
+static void jet_battery_set_fault_enable(bool enable)
 {
 	unsigned long flags;
 	u32 reg, val;
@@ -261,9 +262,9 @@ static void spica_battery_set_fault_enable(bool enable)
 	local_irq_restore(flags);
 }
 
-static irqreturn_t spica_battery_fault_irq(int irq, void *dev_id)
+static irqreturn_t jet_battery_fault_irq(int irq, void *dev_id)
 {
-	struct spica_battery *bat = dev_id;
+	struct jet_battery *bat = dev_id;
 	unsigned long flags;
 	u32 reg;
 #ifdef CONFIG_HAS_WAKELOCK
@@ -271,7 +272,7 @@ static irqreturn_t spica_battery_fault_irq(int irq, void *dev_id)
 #endif
 	local_irq_save(flags);
 
-	spica_battery_set_fault_enable(0);
+	jet_battery_set_fault_enable(0);
 
 	reg = readl(S3C64XX_OTHERS);
 	reg |= S3C64XX_OTHERS_CLEAR_BATF_INT;
@@ -287,18 +288,19 @@ static irqreturn_t spica_battery_fault_irq(int irq, void *dev_id)
 }
 
 /* Polling function */
-static void spica_battery_poll(struct work_struct *work)
+static void jet_battery_poll(struct work_struct *work)
 {
 	struct delayed_work *dwrk = to_delayed_work(work);
-	struct spica_battery *bat =
-			container_of(dwrk, struct spica_battery, poll_work);
-	struct spica_battery_pdata *pdata = bat->pdata;
+	struct jet_battery *bat =
+			container_of(dwrk, struct jet_battery, poll_work);
+	struct jet_battery_pdata *pdata = bat->pdata;
 	int volt_sample, volt_value, temp_sample, temp_value, percent_value;
 	int health, update = 0;
 
 	mutex_lock(&bat->mutex);
 
 	/* Get a voltage sample from the ADC */
+#if 0
 	volt_sample = s3c_adc_read(bat->client, bat->pdata->volt_channel);
 	if (volt_sample < 0) {
 		dev_warn(bat->dev, "Failed to get ADC sample.\n");
@@ -310,9 +312,11 @@ static void spica_battery_poll(struct work_struct *work)
 	volt_sample = put_sample_get_avg(&bat->volt_avg, volt_sample);
 	volt_value = lookup_value(&bat->volt_lookup, volt_sample);
 	percent_value = lookup_value(&bat->percent_lookup, volt_sample);
+#endif
 
 	/* Get a temperature sample from the ADC */
 	temp_sample = s3c_adc_read(bat->client, bat->pdata->temp_channel);
+	//printk("KB: %s VF adc read value = %d\n", __func__, temp_sample);
 	if (temp_sample < 0) {
 		dev_warn(bat->dev, "Failed to get ADC sample.\n");
 		bat->health = POWER_SUPPLY_HEALTH_UNKNOWN;
@@ -321,9 +325,14 @@ static void spica_battery_poll(struct work_struct *work)
 	bat->temp_adc = temp_sample;
 	temp_sample = put_sample_get_avg(&bat->temp_avg, temp_sample);
 	temp_value = lookup_value(&bat->temp_lookup, temp_sample);
+	//printk("KB: %s lookup temp value = %d\n", __func__, temp_value);
 
 	if (bat->health == POWER_SUPPLY_HEALTH_UNKNOWN)
 		bat->health = POWER_SUPPLY_HEALTH_GOOD;
+
+	volt_value = 4100000;
+	percent_value = 70000;
+	//temp_value = 10000;
 
 	bat->volt_value = volt_value;
 	bat->percent_value = percent_value;
@@ -359,29 +368,69 @@ error:
 	}
 }
 
-static void spica_battery_work(struct work_struct *work)
+static void jet_battery_work(struct work_struct *work)
 {
-	struct spica_battery *bat =
-			container_of(work, struct spica_battery, work);
-	struct spica_battery_pdata *pdata = bat->pdata;
-	int is_plugged, is_healthy, chg_enable;
-	enum spica_battery_supply type;
+	struct jet_battery *bat =
+			container_of(work, struct jet_battery, work);
+	struct jet_battery_pdata *pdata = bat->pdata;
+	int is_plugged, is_healthy, chg_enable, bat_low;
+	enum jet_battery_supply type;
 	int i;
-
+	unsigned char buf, vac, vbus, charge_mode;
+#if 0
+	printk("KB: %s Entering\n", __func__);
 	/* Cancel any pending works */
 	cancel_delayed_work_sync(&bat->poll_work);
 
+	if (Get_MAX8906_PM_ADDR(REG_CHG_CNTL1, &buf ,1))
+		printk("KB: %s REG_CHG_CNTL1 = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_CNTL2, &buf ,1))
+		printk("KB: %s REG_CHG_CNTL2 = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_IRQ1, &buf ,1))
+		printk("KB: %s REG_CHG_IRQ1 = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_IRQ2, &buf ,1))
+		printk("KB: %s REG_CHG_IRQ2 = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_IRQ1_MASK, &buf ,1))
+		printk("KB: %s REG_CHG_IRQ1_MASK = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_IRQ2_MASK, &buf ,1))
+		printk("KB: %s REG_CHG_IRQ2_MASK = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_CHG_STAT, &buf ,1))
+		printk("KB: %s REG_CHG_STAT = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_BBATTCNFG, &buf ,1))
+		printk("KB: %s REG_BBATTCNFG = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_LBCNFG, &buf ,1))
+		printk("KB: %s REG_LBCNFG = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_ON_OFF_IRQ, &buf ,1))
+		printk("KB: %s REG_ON_OFF_IRQ = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_ON_OFF_IRQ_MASK, &buf ,1))
+		printk("KB: %s REG_ON_OFF_IRQ_MASK = 0x%02x\n", __func__, buf);
+	if (Get_MAX8906_PM_ADDR(REG_ON_OFF_STAT, &buf ,1))
+		printk("KB: %s REG_ON_OFF_STAT = 0x%02x\n", __func__, buf);
+#endif
+	if (Get_MAX8906_PM_REG(VAC_OK, &vac))
+		printk("KB: %s VAC_OK = 0x%02x\n", __func__, vac);
+	if (Get_MAX8906_PM_REG(VBUS_OK, &vbus))
+		printk("KB: %s VBUS_OK = 0x%02x\n", __func__, vbus);
+	if (Get_MAX8906_PM_REG(CHG_MODE, &charge_mode))
+		printk("KB: %s CHG_MODE = 0x%02x\n", __func__, charge_mode);
+	if (Get_MAX8906_PM_REG(MBATTLOW, &bat_low))
+		printk("KB: %s MBATTLOW = 0x%02x\n", __func__, bat_low);
+
 	/* Check for external power supply connection */
-	is_plugged = gpio_get_value(pdata->gpio_pok) ^ pdata->gpio_pok_inverted;
+//	is_plugged = gpio_get_value(pdata->gpio_pok) ^ pdata->gpio_pok_inverted;
+	is_plugged = vac | vbus;
 
 	/* We're going to access shared data */
 	mutex_lock(&bat->mutex);
 
+	//printk("KB: %s bat->supply = %d\n", __func__, bat->supply);
+	//printk("KB: %s bat->health = %d\n", __func__, bat->health);
+	//printk("KB: %s bat->chg_enable = %d\n", __func__, bat->chg_enable);
 	type = bat->supply;
-	if (type == SPICA_BATTERY_NONE)
+	if (type == JET_BATTERY_NONE)
 		is_plugged = 0;
 
-	for (i = 0; i < SPICA_BATTERY_NUM; ++i)
+	for (i = 0; i < JET_BATTERY_NUM; ++i)
 		bat->online[i] = (type == i);
 
 	is_healthy = (bat->health == POWER_SUPPLY_HEALTH_GOOD);
@@ -406,7 +455,7 @@ static void spica_battery_work(struct work_struct *work)
 		wake_lock(&bat->chg_wakelock);
 #endif
 		/* Enable the charger */
-		gpio_set_value(pdata->gpio_en, !pdata->gpio_en_inverted);
+//		gpio_set_value(pdata->gpio_en, !pdata->gpio_en_inverted);
 
 		bat->fault = 0;
 #ifdef CONFIG_HAS_WAKELOCK
@@ -416,10 +465,10 @@ static void spica_battery_work(struct work_struct *work)
 		bat->status = POWER_SUPPLY_STATUS_DISCHARGING;
 
 		/* Disable the charger */
-		gpio_set_value(pdata->gpio_en, pdata->gpio_en_inverted);
+//		gpio_set_value(pdata->gpio_en, pdata->gpio_en_inverted);
 
 		/* Enable battery fault interrupt */
-		spica_battery_set_fault_enable(1);
+//		jet_battery_set_fault_enable(1);
 #ifdef CONFIG_HAS_WAKELOCK
 		wake_lock_timeout(&bat->chg_wakelock, HZ / 2);
 #endif
@@ -429,7 +478,7 @@ static void spica_battery_work(struct work_struct *work)
 
 no_change:
 	if (chg_enable) {
-		if (gpio_get_value(pdata->gpio_chg) ^ pdata->gpio_chg_inverted)
+		if (charge_mode != CHARGE_DONE)
 			bat->status = POWER_SUPPLY_STATUS_CHARGING;
 		else
 			bat->status = POWER_SUPPLY_STATUS_FULL;
@@ -439,21 +488,21 @@ no_change:
 	mutex_unlock(&bat->mutex);
 
 	/* Update the values and spin the polling loop */
-	spica_battery_poll(&bat->poll_work.work);
+	jet_battery_poll(&bat->poll_work.work);
 
 	/* Notify anyone interested */
 	power_supply_changed(&bat->bat);
-	for (i = 0; i < SPICA_BATTERY_NUM; ++i)
+	for (i = 0; i < JET_BATTERY_NUM; ++i)
 		power_supply_changed(&bat->psy[i]);
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_unlock(&bat->wakelock);
 #endif
 }
 
-static void spica_battery_supply_notify(struct platform_device *pdev,
-						enum spica_battery_supply type)
+static void jet_battery_supply_notify(struct platform_device *pdev,
+						enum jet_battery_supply type)
 {
-	struct spica_battery *bat = platform_get_drvdata(pdev);
+	struct jet_battery *bat = platform_get_drvdata(pdev);
 
 	mutex_lock(&bat->mutex);
 
@@ -485,7 +534,7 @@ static ssize_t dummy_show(struct device *dev,
 static ssize_t compensation_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	mutex_lock(&bat->mutex);
@@ -502,7 +551,7 @@ static DEVICE_ATTR(compensation, S_IRUGO, compensation_show, dummy_store);
 static ssize_t compensation_flags_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	mutex_lock(&bat->mutex);
@@ -520,7 +569,7 @@ static DEVICE_ATTR(compensation_flags, S_IRUGO,
 static ssize_t data_call_store(struct device *dev, struct device_attribute *attr,
 						const char *buf, size_t count)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	if (sscanf(buf, "%d", &val) != 1)
@@ -548,7 +597,7 @@ static DEVICE_ATTR(data_call, S_IWUGO, dummy_show, data_call_store);
 static ssize_t talk_wcdma_store(struct device *dev, struct device_attribute *attr,
 						const char *buf, size_t count)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	if (sscanf(buf, "%d", &val) != 1)
@@ -576,7 +625,7 @@ static DEVICE_ATTR(talk_wcdma, S_IWUGO, dummy_show, talk_wcdma_store);
 static ssize_t talk_gsm_store(struct device *dev, struct device_attribute *attr,
 						const char *buf, size_t count)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	if (sscanf(buf, "%d", &val) != 1)
@@ -604,7 +653,7 @@ static DEVICE_ATTR(talk_gsm, S_IWUGO, dummy_show, talk_gsm_store);
 static ssize_t charging_source_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int source;
 
 	mutex_lock(&bat->mutex);
@@ -621,7 +670,7 @@ static DEVICE_ATTR(charging_source, S_IRUGO, charging_source_show, dummy_store);
 static ssize_t batt_vol_adc_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	mutex_lock(&bat->mutex);
@@ -638,7 +687,7 @@ static DEVICE_ATTR(batt_vol_adc, S_IRUGO, batt_vol_adc_show, dummy_store);
 static ssize_t batt_temp_adc_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	mutex_lock(&bat->mutex);
@@ -655,7 +704,7 @@ static DEVICE_ATTR(batt_temp_adc, S_IRUGO, batt_temp_adc_show, dummy_store);
 static ssize_t batt_vol_adc_cal_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	mutex_lock(&bat->mutex);
@@ -670,7 +719,7 @@ static ssize_t batt_vol_adc_cal_show(struct device *dev,
 static ssize_t batt_vol_adc_cal_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	if (sscanf(buf, "%d", &val) != 1)
@@ -705,11 +754,11 @@ static struct device_attribute *battery_attrs[] = {
 };
 
 /* Gets a property */
-static int spica_battery_get_property(struct power_supply *psy,
+static int jet_battery_get_property(struct power_supply *psy,
 				    enum power_supply_property psp,
 				    union power_supply_propval *val)
 {
-	struct spica_battery *bat = dev_get_drvdata(psy->dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(psy->dev->parent);
 	int ret = 0;
 
 	mutex_lock(&bat->mutex);
@@ -772,7 +821,7 @@ static int spica_battery_get_property(struct power_supply *psy,
 }
 
 /* Properties which we support */
-static enum power_supply_property spica_battery_props[] = {
+static enum power_supply_property jet_battery_props[] = {
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_HEALTH,
 	POWER_SUPPLY_PROP_PRESENT,
@@ -786,12 +835,12 @@ static enum power_supply_property spica_battery_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY
 };
 
-static const struct power_supply spica_bat_template = {
+static const struct power_supply jet_bat_template = {
 	.name			= "battery",
 	.type			= POWER_SUPPLY_TYPE_BATTERY,
-	.properties		= spica_battery_props,
-	.num_properties		= ARRAY_SIZE(spica_battery_props),
-	.get_property		= spica_battery_get_property,
+	.properties		= jet_battery_props,
+	.num_properties		= ARRAY_SIZE(jet_battery_props),
+	.get_property		= jet_battery_get_property,
 };
 
 /*
@@ -801,7 +850,7 @@ static const struct power_supply spica_bat_template = {
 static ssize_t suspend_lock_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(dev->parent);
 	int val;
 
 	if (sscanf(buf, "%d\n", &val) != 1)
@@ -825,9 +874,9 @@ static DEVICE_ATTR(suspend_lock, S_IRUGO | S_IWUGO,
 					suspend_lock_show, suspend_lock_store);
 #endif
 /* State change irq */
-static irqreturn_t spica_charger_irq(int irq, void *dev_id)
+static irqreturn_t jet_charger_irq(int irq, void *dev_id)
 {
-	struct spica_battery *bat = dev_id;
+	struct jet_battery *bat = dev_id;
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock(&bat->wakelock);
 #endif
@@ -837,11 +886,11 @@ static irqreturn_t spica_charger_irq(int irq, void *dev_id)
 }
 
 /* Gets a property */
-static int spica_charger_get_property(struct power_supply *psy,
+static int jet_charger_get_property(struct power_supply *psy,
 				    enum power_supply_property psp,
 				    union power_supply_propval *val)
 {
-	struct spica_battery *bat = dev_get_drvdata(psy->dev->parent);
+	struct jet_battery *bat = dev_get_drvdata(psy->dev->parent);
 	int id = psy - bat->psy;
 	int ret = 0;
 
@@ -861,22 +910,22 @@ static int spica_charger_get_property(struct power_supply *psy,
 	return ret;
 }
 
-static enum power_supply_property spica_charger_props[] = {
+static enum power_supply_property jet_charger_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
 
-static const struct power_supply spica_chg_templates[SPICA_BATTERY_NUM] = {
-	[SPICA_BATTERY_USB] = {
-		.properties		= spica_charger_props,
-		.num_properties		= ARRAY_SIZE(spica_charger_props),
-		.get_property		= spica_charger_get_property,
+static const struct power_supply jet_chg_templates[JET_BATTERY_NUM] = {
+	[JET_BATTERY_USB] = {
+		.properties		= jet_charger_props,
+		.num_properties		= ARRAY_SIZE(jet_charger_props),
+		.get_property		= jet_charger_get_property,
 		.name			= "usb",
 		.type			= POWER_SUPPLY_TYPE_USB,
 	},
-	[SPICA_BATTERY_AC] = {
-		.properties		= spica_charger_props,
-		.num_properties		= ARRAY_SIZE(spica_charger_props),
-		.get_property		= spica_charger_get_property,
+	[JET_BATTERY_AC] = {
+		.properties		= jet_charger_props,
+		.num_properties		= ARRAY_SIZE(jet_charger_props),
+		.get_property		= jet_charger_get_property,
 		.name			= "ac",
 		.type			= POWER_SUPPLY_TYPE_MAINS,
 	}
@@ -886,11 +935,11 @@ static const struct power_supply spica_chg_templates[SPICA_BATTERY_NUM] = {
  * Platform driver
  */
 
-static int spica_battery_probe(struct platform_device *pdev)
+static int jet_battery_probe(struct platform_device *pdev)
 {
 	struct s3c_adc_client	*client;
-	struct spica_battery_pdata *pdata = pdev->dev.platform_data;
-	struct spica_battery *bat;
+	struct jet_battery_pdata *pdata = pdev->dev.platform_data;
+	struct jet_battery *bat;
 	int ret, i, irq;
 
 	/* Platform data is required */
@@ -905,6 +954,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+#if 0
 	if (!gpio_is_valid(pdata->gpio_chg)) {
 		dev_err(&pdev->dev, "Invalid gpio pin for CHG line\n");
 		return -EINVAL;
@@ -914,21 +964,24 @@ static int spica_battery_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Invalid gpio pin for EN line\n");
 		return -EINVAL;
 	}
+#endif
 
 	if (!pdata->supply_detect_init) {
 		dev_err(&pdev->dev, "Supply detection is required\n");
 		return -EINVAL;
 	}
 
+#if 1
 	/* Register ADC client */
 	client = s3c_adc_register(pdev, NULL, NULL, 0);
 	if (IS_ERR(client)) {
 		dev_err(&pdev->dev, "could not register adc\n");
 		return PTR_ERR(client);
 	}
+#endif
 
 	/* Allocate driver data */
-	bat = kzalloc(sizeof(struct spica_battery), GFP_KERNEL);
+	bat = kzalloc(sizeof(struct jet_battery), GFP_KERNEL);
 	if (!bat) {
 		dev_err(&pdev->dev, "could not allocate driver data\n");
 		ret = -ENOMEM;
@@ -948,6 +1001,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 		goto err_gpio_pok_free;
 	}
 
+#if 0
 	ret = gpio_request(pdata->gpio_chg, dev_name(&pdev->dev));
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request CHG pin: %d\n", ret);
@@ -971,6 +1025,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to set EN to output: %d\n", ret);
 		goto err_gpio_en_free;
 	}
+#endif
 
 	platform_set_drvdata(pdev, bat);
 
@@ -979,10 +1034,11 @@ static int spica_battery_probe(struct platform_device *pdev)
 	bat->pdata = pdata;
 	bat->status = POWER_SUPPLY_STATUS_DISCHARGING;
 	bat->health = POWER_SUPPLY_HEALTH_GOOD;
-	bat->supply = SPICA_BATTERY_NONE;
+	bat->supply = JET_BATTERY_NONE;
 	bat->interval = BAT_POLL_INTERVAL;
 	bat->calibration = pdata->calibration;
 
+#if 0
 	ret = create_lookup_table(pdata->percent_lut,
 				pdata->percent_lut_cnt, &bat->percent_lookup);
 	if (ret) {
@@ -996,6 +1052,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "could not get create voltage lookup table");
 		goto err_percent_free;
 	}
+#endif
 
 	ret = create_lookup_table(pdata->temp_lut,
 				pdata->temp_lut_cnt, &bat->temp_lookup);
@@ -1004,8 +1061,8 @@ static int spica_battery_probe(struct platform_device *pdev)
 		goto err_volt_free;
 	}
 
-	INIT_WORK(&bat->work, spica_battery_work);
-	INIT_DELAYED_WORK(&bat->poll_work, spica_battery_poll);
+	INIT_WORK(&bat->work, jet_battery_work);
+	INIT_DELAYED_WORK(&bat->poll_work, jet_battery_poll);
 	mutex_init(&bat->mutex);
 #ifdef CONFIG_HAS_WAKELOCK
 	wake_lock_init(&bat->wakelock, WAKE_LOCK_SUSPEND, "battery");
@@ -1016,11 +1073,14 @@ static int spica_battery_probe(struct platform_device *pdev)
 #endif
 #ifdef CONFIG_RTC_INTF_ALARM
 	alarm_init(&bat->alarm, ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
-							spica_battery_alarm);
+							jet_battery_alarm);
 #endif
+
+#if 1
 	/* Get some initial data for averaging */
 	for (i = 0; i < NUM_SAMPLES; ++i) {
 		int sample;
+#if 0
 		/* Get a voltage sample from the ADC */
 		sample = s3c_adc_read(bat->client, bat->pdata->volt_channel);
 		if (sample < 0) {
@@ -1031,24 +1091,28 @@ static int spica_battery_probe(struct platform_device *pdev)
 		bat->vol_adc = sample;
 		/* Put the sample and get the new average */
 		bat->volt_value = put_sample_get_avg(&bat->volt_avg, sample);
+#endif
 		/* Get a temperature sample from the ADC */
 		sample = s3c_adc_read(bat->client, bat->pdata->temp_channel);
 		if (sample < 0) {
 			dev_warn(&pdev->dev, "Failed to get ADC sample.\n");
 			continue;
 		}
+		printk("KB: %s VF adc read value = %d\n", __func__, sample);
 		bat->temp_adc = sample;
 		/* Put the sample and get the new average */
 		bat->temp_value = put_sample_get_avg(&bat->temp_avg, sample);
 	}
+#endif
 
-	bat->percent_value = lookup_value(&bat->percent_lookup, bat->volt_value);
-	bat->volt_value = lookup_value(&bat->volt_lookup, bat->volt_value);
+	bat->percent_value = 70000; //lookup_value(&bat->percent_lookup, bat->volt_value);
+	bat->volt_value = 4100000; //lookup_value(&bat->volt_lookup, bat->volt_value);
 	bat->temp_value = lookup_value(&bat->temp_lookup, bat->temp_value);
+	//printk("KB: %s lookup temp value = %d\n", __func__, bat->temp_value);
 
 	/* Register the power supplies */
-	for (i = 0; i < SPICA_BATTERY_NUM; ++i) {
-		bat->psy[i] = spica_chg_templates[i];
+	for (i = 0; i < JET_BATTERY_NUM; ++i) {
+		bat->psy[i] = jet_chg_templates[i];
 		ret = power_supply_register(&pdev->dev, &bat->psy[i]);
 		if (ret < 0) {
 			dev_err(&pdev->dev,
@@ -1059,13 +1123,13 @@ static int spica_battery_probe(struct platform_device *pdev)
 	}
 
 	/* Undo the loop on error */
-	if (i-- != SPICA_BATTERY_NUM) {
+	if (i-- != JET_BATTERY_NUM) {
 		for (; i >= 0; --i)
 			power_supply_unregister(&bat->psy[i]);
 		goto err_temp_free;
 	}
 #ifdef CONFIG_HAS_WAKELOCK
-	ret = device_create_file(bat->psy[SPICA_BATTERY_AC].dev,
+	ret = device_create_file(bat->psy[JET_BATTERY_AC].dev,
 							&dev_attr_suspend_lock);
 	if (ret < 0) {
 		dev_err(&pdev->dev,
@@ -1074,7 +1138,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 	}
 #endif
 	/* Register the battery */
-	bat->bat = spica_bat_template;
+	bat->bat = jet_bat_template;
 	ret = power_supply_register(&pdev->dev, &bat->bat);
 	if (ret < 0) {
 		dev_err(&pdev->dev,
@@ -1102,6 +1166,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 	}
 
 	/* Claim IRQs */
+#if 0
 	irq = gpio_to_irq(pdata->gpio_pok);
 	if (irq <= 0) {
 		dev_err(&pdev->dev, "POK irq invalid.\n");
@@ -1109,14 +1174,16 @@ static int spica_battery_probe(struct platform_device *pdev)
 	}
 	bat->irq_pok = irq;
 
-	ret = request_irq(irq, spica_charger_irq,
+	ret = request_irq(irq, jet_charger_irq,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				dev_name(&pdev->dev), bat);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request POK irq (%d)\n", ret);
 		goto err_destroy_workqueue;
 	}
+#endif
 
+#if 0
 	irq = gpio_to_irq(pdata->gpio_chg);
 	if (irq <= 0) {
 		dev_err(&pdev->dev, "CHG irq invalid.\n");
@@ -1124,7 +1191,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 	}
 	bat->irq_chg = irq;
 
-	ret = request_irq(irq, spica_charger_irq,
+	ret = request_irq(irq, jet_charger_irq,
 				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 				dev_name(&pdev->dev), bat);
 	if (ret) {
@@ -1132,24 +1199,25 @@ static int spica_battery_probe(struct platform_device *pdev)
 		goto err_pok_irq_free;
 	}
 
-	ret = request_irq(IRQ_BATF, spica_battery_fault_irq,
+	ret = request_irq(IRQ_BATF, jet_battery_fault_irq,
 						0, dev_name(&pdev->dev), bat);
 	if (ret) {
 		dev_err(&pdev->dev,
 			"Failed to request battery fault irq (%d)\n", ret);
 		goto err_chg_irq_free;
 	}
+#endif
 
-	enable_irq_wake(bat->irq_pok);
+//	enable_irq_wake(bat->irq_pok);
 	enable_irq_wake(bat->irq_chg);
 
-	spica_battery_set_fault_enable(1);
+//	jet_battery_set_fault_enable(1);
 
 	/* Finish */
 	dev_info(&pdev->dev, "successfully loaded\n");
 	device_init_wakeup(&pdev->dev, 1);
 
-	pdata->supply_detect_init(spica_battery_supply_notify);
+	pdata->supply_detect_init(jet_battery_supply_notify);
 
 	/* Schedule work to check current status */
 #ifdef CONFIG_HAS_WAKELOCK
@@ -1162,7 +1230,7 @@ static int spica_battery_probe(struct platform_device *pdev)
 err_chg_irq_free:
 	free_irq(bat->irq_chg, bat);
 err_pok_irq_free:
-	free_irq(bat->irq_pok, bat);
+//	free_irq(bat->irq_pok, bat);
 err_destroy_workqueue:
 	destroy_workqueue(bat->workqueue);
 err_remove_bat_attr:
@@ -1172,11 +1240,11 @@ err_bat_unreg:
 	power_supply_unregister(&bat->bat);
 err_attr_unreg:
 #ifdef CONFIG_HAS_WAKELOCK
-	device_remove_file(bat->psy[SPICA_BATTERY_AC].dev,
+	device_remove_file(bat->psy[JET_BATTERY_AC].dev,
 							&dev_attr_suspend_lock);
 err_psy_unreg:
 #endif
-	for (i = 0; i < SPICA_BATTERY_NUM; ++i)
+	for (i = 0; i < JET_BATTERY_NUM; ++i)
 		power_supply_unregister(&bat->psy[i]);
 err_temp_free:
 #ifdef CONFIG_HAS_WAKELOCK
@@ -1191,7 +1259,7 @@ err_volt_free:
 err_percent_free:
 	kfree(bat->percent_lookup.table);
 err_gpio_en_free:
-	gpio_free(pdata->gpio_en);
+//	gpio_free(pdata->gpio_en);
 err_gpio_chg_free:
 	gpio_free(pdata->gpio_chg);
 err_gpio_pok_free:
@@ -1199,14 +1267,14 @@ err_gpio_pok_free:
 err_free:
 	kfree(bat);
 err_free_adc:
-	s3c_adc_release(client);
+//	s3c_adc_release(client);
 	return ret;
 }
 
-static int spica_battery_remove(struct platform_device *pdev)
+static int jet_battery_remove(struct platform_device *pdev)
 {
-	struct spica_battery *bat = platform_get_drvdata(pdev);
-	struct spica_battery_pdata *pdata = bat->pdata;
+	struct jet_battery *bat = platform_get_drvdata(pdev);
+	struct jet_battery_pdata *pdata = bat->pdata;
 	int i;
 
 	disable_irq_wake(bat->irq_pok);
@@ -1223,10 +1291,10 @@ static int spica_battery_remove(struct platform_device *pdev)
 		device_remove_file(bat->bat.dev, battery_attrs[i]);
 	power_supply_unregister(&bat->bat);
 #ifdef CONFIG_HAS_WAKELOCK
-	device_remove_file(bat->psy[SPICA_BATTERY_AC].dev,
+	device_remove_file(bat->psy[JET_BATTERY_AC].dev,
 							&dev_attr_suspend_lock);
 #endif
-	for (i = 0; i < SPICA_BATTERY_NUM; ++i)
+	for (i = 0; i < JET_BATTERY_NUM; ++i)
 		power_supply_unregister(&bat->psy[i]);
 
 	cancel_work_sync(&bat->work);
@@ -1251,9 +1319,9 @@ static int spica_battery_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int spica_battery_prepare(struct device *dev)
+static int jet_battery_prepare(struct device *dev)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev);
+	struct jet_battery *bat = dev_get_drvdata(dev);
 	ktime_t now, start, end;
 #ifdef CONFIG_RTC_INTF_ALARM
 	now = alarm_get_elapsed_realtime();
@@ -1266,9 +1334,9 @@ static int spica_battery_prepare(struct device *dev)
 	return 0;
 }
 
-static void spica_battery_complete(struct device *dev)
+static void jet_battery_complete(struct device *dev)
 {
-	struct spica_battery *bat = dev_get_drvdata(dev);
+	struct jet_battery *bat = dev_get_drvdata(dev);
 	int volt_value = -1, temp_value = -1;
 	int i;
 #ifdef CONFIG_HAS_WAKELOCK
@@ -1313,35 +1381,35 @@ static void spica_battery_complete(struct device *dev)
 	queue_work(bat->workqueue, &bat->work);
 }
 
-static struct dev_pm_ops spica_battery_pm_ops = {
-	.prepare	= spica_battery_prepare,
-	.complete	= spica_battery_complete,
+static struct dev_pm_ops jet_battery_pm_ops = {
+	.prepare	= jet_battery_prepare,
+	.complete	= jet_battery_complete,
 };
 
-static struct platform_driver spica_battery_driver = {
+static struct platform_driver jet_battery_driver = {
 	.driver		= {
-		.name	= "spica-battery",
-		.pm	= &spica_battery_pm_ops,
+		.name	= "jet-battery",
+		.pm	= &jet_battery_pm_ops,
 	},
-	.probe		= spica_battery_probe,
-	.remove		= spica_battery_remove,
+	.probe		= jet_battery_probe,
+	.remove		= jet_battery_remove,
 };
 
 /*
  * Kernel module
  */
 
-static int __init spica_battery_init(void)
+static int __init jet_battery_init(void)
 {
-	return platform_driver_register(&spica_battery_driver);
+	return platform_driver_register(&jet_battery_driver);
 }
-module_init(spica_battery_init);
+module_init(jet_battery_init);
 
-static void __exit spica_battery_exit(void)
+static void __exit jet_battery_exit(void)
 {
-	platform_driver_unregister(&spica_battery_driver);
+	platform_driver_unregister(&jet_battery_driver);
 }
-module_exit(spica_battery_exit);
+module_exit(jet_battery_exit);
 
 MODULE_AUTHOR("Tomasz Figa <tomasz.figa at gmail.com>");
 MODULE_DESCRIPTION("ADC-based battery driver for Samsung Spica");
