@@ -58,7 +58,7 @@
 
 enum samsung_keypad_type {
 	KEYPAD_TYPE_SAMSUNG,
-	KEYPAD_TYPE_S5PV210,
+	KEYPAD_TYPE_TRI_STATE,
 };
 
 struct samsung_keypad {
@@ -75,13 +75,13 @@ struct samsung_keypad {
 	unsigned short keycodes[];
 };
 
-static int samsung_keypad_is_s5pv210(struct device *dev)
+static int samsung_keypad_is_tri_state(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	enum samsung_keypad_type type =
 		platform_get_device_id(pdev)->driver_data;
 
-	return type == KEYPAD_TYPE_S5PV210;
+	return type == KEYPAD_TYPE_TRI_STATE;
 }
 
 static void samsung_keypad_scan(struct samsung_keypad *keypad,
@@ -92,7 +92,7 @@ static void samsung_keypad_scan(struct samsung_keypad *keypad,
 	unsigned int val;
 
 	for (col = 0; col < keypad->cols; col++) {
-		if (samsung_keypad_is_s5pv210(dev)) {
+		if (samsung_keypad_is_tri_state(dev)) {
 			val = S5PV210_KEYIFCOLEN_MASK;
 			val &= ~(1 << col) << 8;
 		} else {
@@ -101,7 +101,7 @@ static void samsung_keypad_scan(struct samsung_keypad *keypad,
 		}
 
 		writel(val, keypad->base + SAMSUNG_KEYIFCOL);
-		mdelay(1);
+		udelay(50);
 
 		val = readl(keypad->base + SAMSUNG_KEYIFROW);
 		row_state[col] = ~val & ((1 << keypad->rows) - 1);
@@ -184,9 +184,14 @@ static void samsung_keypad_start(struct samsung_keypad *keypad)
 
 	clk_enable(keypad->clk);
 
+	/* Setup filtering delay */
+	val = readl(keypad->base + SAMSUNG_KEYIFFC);
+	writel(val | 1, keypad->base + SAMSUNG_KEYIFFC);
+
 	/* Enable interrupt bits. */
 	val = readl(keypad->base + SAMSUNG_KEYIFCON);
 	val |= SAMSUNG_KEYIFCON_INT_F_EN | SAMSUNG_KEYIFCON_INT_R_EN;
+	val |= SAMSUNG_KEYIFCON_DF_EN | SAMSUNG_KEYIFCON_FC_EN;
 	writel(val, keypad->base + SAMSUNG_KEYIFCON);
 
 	/* KEYIFCOL reg clear. */
@@ -453,7 +458,10 @@ static struct platform_device_id samsung_keypad_driver_ids[] = {
 		.driver_data	= KEYPAD_TYPE_SAMSUNG,
 	}, {
 		.name		= "s5pv210-keypad",
-		.driver_data	= KEYPAD_TYPE_S5PV210,
+		.driver_data	= KEYPAD_TYPE_TRI_STATE,
+	}, {
+		.name		= "s3c6410-keypad",
+		.driver_data	= KEYPAD_TYPE_TRI_STATE,
 	},
 	{ },
 };

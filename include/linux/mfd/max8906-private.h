@@ -1362,14 +1362,6 @@ typedef struct {
 } max8906_irq_table_type;
 
 
-
-
-
-
-
-
-
-
 /* For Touch-Screen Conversion Command Register */
 #define EN_REF 0x04
 #define CONT   0x01
