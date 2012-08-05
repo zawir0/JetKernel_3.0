@@ -219,6 +219,8 @@
 #define IRQ_HEADSET		IRQ_EINT(11)	//J
 /* Falling edge */
 #define IRQ_FSA9480		IRQ_EINT(12)	//J
+/* Falling edge */
+#define IRQ_FM			IRQ_EINT(18)
 /* Both edges */
 #define IRQ_HOLD_KEY		IRQ_EINT(17)
 /* Both edges */
@@ -395,16 +397,18 @@ static struct platform_device jet_fm_i2c = {
 };
 
 #if 0
-static struct ak4671_platform_data spica_ak4671_pdata = {
-	.gpio_npdn = GPIO_MAX8906_AMP_EN,		// previously AUDIO_EN
+static struct si470x_platform_data jet_si470x_pdata = {
+	.gpio_fm_on = GPIO_FM_LDO_ON,
+	.gpio_fm_reset = GPIO_FM_RST,
 };
 #endif
 
 static struct i2c_board_info jet_fm_i2c_devs[] __initdata = {
 	{
-		.type		= "ak4671",
-		.addr		= 0x12,
-//		.platform_data	= &spica_ak4671_pdata,
+		.type		= "si470x",
+		.addr		= 0x10,
+		.irq		= IRQ_FM,
+//		.platform_data	= &jet_si470x_pdata,
 	}
 };
 
@@ -1810,14 +1814,11 @@ static void snd_set_mic_bias(bool on)
 static void jack_set_mic_bias(bool on)
 {
 	unsigned long flags;
-
 	local_irq_save(flags);
 
 	jack_mic_bias = on;
-//	gpio_set_value(GPIO_MICBIAS_EN, snd_mic_bias || jack_mic_bias);
-// FIXME: enable MICBIAS_EAR_LDO_2.5V via MAX8906
-	//if (Set_MAX8906_PM_REG(WMEMEN, snd_mic_bias || jack_mic_bias))
-		printk("Successfully enabled regulator WMEMEN\n");
+	if (Set_MAX8906_PM_REG(WMEMEN, snd_mic_bias || jack_mic_bias))
+		printk("Changed Ear Mic Bias to %d\n", snd_mic_bias || jack_mic_bias);
 
 	local_irq_restore(flags);
 }
@@ -2275,7 +2276,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_EARPATH_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_CP_CODEC_SW), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MAIN_CP_CODEC_SW), S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_FM_RST), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_RST), 		S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CAM_VGA_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CAM_VGA_STBY_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MSENSE_RST), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2290,7 +2291,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_ALPS_ON), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MAX8906_AMP_EN), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PDA_ACTIVE), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_FM_LDO_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_LDO_ON), 	S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PHONE_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CP_BOOT_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PCM_SEL), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2328,6 +2329,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_PMIC_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_JACK_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_DET_35), 		S3C_PIN_CFG(3), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_INT), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_SEND_END), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_RESOUT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BOOT_EINT13), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),

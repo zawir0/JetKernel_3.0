@@ -19,6 +19,7 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/gpio.h>
+#include <linux/delay.h>
 #include <linux/i2c/max8906.h>
 
 #include <sound/core.h>
@@ -38,6 +39,9 @@
 
 static struct snd_soc_card gt_s8000;
 static struct gt_s8000_audio_pdata *gt_s8000_pdata;
+
+#define GPIO_FM_LDO_ON		S3C64XX_GPN(4)
+#define GPIO_FM_RST			S3C64XX_GPK(5)
 
 static int gt_s8000_hifi_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
@@ -119,6 +123,35 @@ static int gt_s8000_main_mic_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static int gt_s8000_fm_receive_event(struct snd_soc_dapm_widget *w,
+				struct snd_kcontrol *k,
+				int event)
+{
+	int en = 0;
+	return 0;
+	mutex_lock(&mic_lock);
+
+	if (SND_SOC_DAPM_EVENT_ON(event))
+	{
+		gpio_set_value(GPIO_FM_LDO_ON, 1);
+		mdelay(100);
+		gpio_set_value(GPIO_FM_RST, 0);
+		mdelay(100);
+		gpio_set_value(GPIO_FM_RST, 1);
+	}
+	else
+	{
+		gpio_set_value(GPIO_FM_LDO_ON, 0);
+	}
+	//gt_s8000_pdata->set_micbias(!!mic_enabled);
+//	if (Set_MAX8906_PM_REG(WMEMEN, en))
+		printk("KB: %s fm receive\n", __func__);
+
+	mutex_unlock(&mic_lock);
+
+	return 0;
+}
+
 static int gt_s8000_sub_mic_event(struct snd_soc_dapm_widget *w,
 				struct snd_kcontrol *k,
 				int event)
@@ -143,7 +176,7 @@ static int gt_s8000_sub_mic_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-static int gt_s8000_fm_in_event(struct snd_soc_dapm_widget *w,
+static int gt_s8000_jack_mic_event(struct snd_soc_dapm_widget *w,
 				struct snd_kcontrol *k,
 				int event)
 {
@@ -166,7 +199,7 @@ static const struct snd_kcontrol_new gt_s8000_direct_controls[] = {
 //	SOC_DAPM_PIN_SWITCH("GSM Send"),
 	SOC_DAPM_PIN_SWITCH("Main Mic"),
 	SOC_DAPM_PIN_SWITCH("Ear Mic"),
-	SOC_DAPM_PIN_SWITCH("FM In"),
+	SOC_DAPM_PIN_SWITCH("FM Receive"),
 	SOC_DAPM_PIN_SWITCH("GSM Receive"),
 };
 
@@ -180,8 +213,8 @@ static const struct snd_soc_dapm_widget gt_s8000_dapm_direct_widgets[] = {
 //	SND_SOC_DAPM_LINE("GSM Send", NULL),
 	SND_SOC_DAPM_MIC("Main Mic", gt_s8000_main_mic_event),
 	SND_SOC_DAPM_MIC("Ear Mic", gt_s8000_sub_mic_event),
-	SND_SOC_DAPM_MIC("FM In", gt_s8000_fm_in_event),
 	SND_SOC_DAPM_MIC("GSM Receive", NULL),
+	SND_SOC_DAPM_LINE("FM Receive", gt_s8000_fm_receive_event),
 };
 
 static const struct snd_soc_dapm_widget gt_s8000_dapm_amp_widgets[] = {
@@ -201,8 +234,8 @@ static const struct snd_soc_dapm_route dapm_direct_routes[] = {
 	//{"RIN1", NULL, "Main Mic"},
 	{"EMICIN", NULL, "Ear Mic"},
 	//{"RIN2", NULL, "Sub Mic"},
-	{"LLINEIN", NULL, "FM In"},
-	{"RLINEIN", NULL, "FM In"},
+	{"LLINEIN", NULL, "FM Receive"},
+	{"RLINEIN", NULL, "FM Receive"},
 };
 
 static const struct snd_soc_dapm_route dapm_amp_routes[] = {
@@ -252,13 +285,13 @@ static int gt_s8000_max9880_init(struct snd_soc_pcm_runtime *rtd)
 	//snd_soc_dapm_disable_pin(dapm, "GSM Send");
 	snd_soc_dapm_disable_pin(dapm, "Main Mic");
 	snd_soc_dapm_disable_pin(dapm, "Ear Mic");
-	snd_soc_dapm_disable_pin(dapm, "FM In");
+	snd_soc_dapm_disable_pin(dapm, "FM Receive");
 	snd_soc_dapm_disable_pin(dapm, "GSM Receive");
 	snd_soc_dapm_ignore_suspend(dapm, "Earpiece");
 	//snd_soc_dapm_ignore_suspend(dapm, "GSM Send");
 	snd_soc_dapm_ignore_suspend(dapm, "Main Mic");
 	snd_soc_dapm_ignore_suspend(dapm, "Ear Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "FM In");
+	snd_soc_dapm_ignore_suspend(dapm, "FM Receive");
 	snd_soc_dapm_ignore_suspend(dapm, "GSM Receive");
 
 	snd_soc_dapm_sync(dapm);

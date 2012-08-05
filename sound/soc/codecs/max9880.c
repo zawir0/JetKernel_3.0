@@ -99,7 +99,7 @@ static const max9880_reg[MAX9880_CACHEREGNUM] = {
 	0x00, /* MAX9880_CODEC_FILTER 		(0x11) */
 	0x00, /* MAX9880_DSD_CONFIG 		(0x12) */
 	0x00, /* MAX9880_DSD_INPUT 			(0x13) */
-	0x00, /* MAX9880_REVISION_ID 		(0x14) */
+	0x41, /* MAX9880_REVISION_ID 		(0x14) */
 	0x00, /* MAX9880_SIDETONE 			(0x15) */
 	0x00, /* MAX9880_STEREO_DAC_LVL 	(0x16) */
 	0x00, /* MAX9880_VOICE_DAC_LVL 		(0x17) */
@@ -118,7 +118,7 @@ static const max9880_reg[MAX9880_CACHEREGNUM] = {
 	0x04, /* MAX9880_MODE_CONFIG 		(0x24) */
 	0x00, /* MAX9880_JACK_DETECT 		(0x25) */
 	0x00, /* MAX9880_PM_ENABLE 			(0x26) */
-	0x88, /* MAX9880_PM_SHUTDOWN 		(0x27) */
+	0x00, /* MAX9880_PM_SHUTDOWN 		(0x27) */
 };
 
 /*******************************************************************************
@@ -187,7 +187,6 @@ static int max9880_input_mixer_set(struct snd_kcontrol *kcontrol,
 
 	return 1;
 }
-
 
 static const char* max9880_filter_mode[] = {"IIR", "FIR"};
 static const char* max9880_hp_filter[] = {"None", "1", "2", "3", "4", "5"};
@@ -306,28 +305,19 @@ static const struct snd_kcontrol_new max9880_snd_controls[] = {
 	SOC_ENUM("Sidetone Source", max9880_enum[3]),
 	// Sidetone level
 	SOC_SINGLE("Sidetone Level", MAX9880_SIDETONE, 0, 31, 1),
-	// SDACA Attenuation
-		//SOC_SINGLE("SDACA Attenuation", MAX9880_STEREO_DAC_LVL, 0, 15, 1),
-	// VDACA Attenuation
-		//SOC_SINGLE("VDACA Attenuation", MAX9880_VOICE_DAC_LVL, 0, 15, 1),
-	// DAC Gain
-		//SOC_SINGLE("DAC Gain", MAX9880_VOICE_DAC_LVL, 4, 3, 0),
-	// ADC Gain
-		//SOC_DOUBLE_R("ADC Gain", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 4, 3, 0),
-	// ADC Level
-		//SOC_DOUBLE_R("ADC Level", MAX9880_LEFT_ADC_LVL, MAX9880_RIGHT_ADC_LVL, 0, 15, 1),
-	// Line Input Gain
-		//SOC_DOUBLE_R("Line Input Gain", MAX9880_LEFT_LINE_IN_LVL, MAX9880_RIGHT_LINE_IN_LVL, 0, 15, 1),
-	// VOLL and VOLR
-		//SOC_DOUBLE_R("Master Playback Volume", MAX9880_LEFT_VOL_LVL, MAX9880_RIGHT_VOL_LVL, 0, 63, 1),
-	// Line Output Gain
-		//SOC_DOUBLE_R("Line Output Gain", MAX9880_LEFT_LINE_OUT_LVL, MAX9880_RIGHT_LINE_OUT_LVL, 0, 15, 1),
-	// Microphone Pre-Amp
-		//SOC_DOUBLE_R("Microphone Pre-Amp", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 5, 3, 1),
-	// Microphone PGA
-		//SOC_DOUBLE_R("Microphone PGA", MAX9880_LEFT_MIC_GAIN, MAX9880_RIGHT_MIC_GAIN, 0, 31, 1),
 	// Input Mixer
   SOC_ENUM_EXT("Input Mixer", max9880_input_mixer_enum , max9880_input_mixer_get, max9880_input_mixer_set),
+};
+
+/* Output Mixer */
+static const struct snd_kcontrol_new max9880_left_output_mixer_controls[] = {
+		SOC_DAPM_SINGLE("Left LIN", MAX9880_PM_ENABLE, 7, 1, 0),
+		SOC_DAPM_SINGLE("DACL", MAX9880_PM_ENABLE, 3, 1, 0),
+};
+
+static const struct snd_kcontrol_new max9880_right_output_mixer_controls[] = {
+		SOC_DAPM_SINGLE("Right LIN", MAX9880_PM_ENABLE, 6, 1, 0),
+		SOC_DAPM_SINGLE("DACR", MAX9880_PM_ENABLE, 2, 1, 0),
 };
 
 static const struct snd_soc_dapm_widget max9880_dapm_widgets[] = {
@@ -341,17 +331,20 @@ static const struct snd_soc_dapm_widget max9880_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("LOUTL"), // Line output
 	SND_SOC_DAPM_OUTPUT("LOUTR"), // Line output
 
-	SND_SOC_DAPM_ADC("LADC", "HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
-	SND_SOC_DAPM_ADC("RADC", "HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
+	SND_SOC_DAPM_ADC("ADC Left", "Left HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
+	SND_SOC_DAPM_ADC("ADC Right", "Right HiFi Capture", MAX9880_PM_ENABLE, 1, 0),
 
 	SND_SOC_DAPM_MIXER("Input Mixer", SND_SOC_NOPM, 0, 0, NULL, 0), 
-	SND_SOC_DAPM_MIXER("Output Mixer", SND_SOC_NOPM, 0, 0, NULL, 0),
 
-	SND_SOC_DAPM_DAC("LDAC", "HiFi Playback", MAX9880_PM_ENABLE, 3, 0),
-	SND_SOC_DAPM_DAC("RDAC", "HiFi Playback", MAX9880_PM_ENABLE, 2, 0),
+	SND_SOC_DAPM_MIXER("LOUT Mixer", MAX9880_PM_ENABLE, 5, 0, &max9880_left_output_mixer_controls[0],
+		ARRAY_SIZE(max9880_left_output_mixer_controls)),
 
-	SND_SOC_DAPM_AIF_OUT("LLOUT", "HiFi Playback", 0, MAX9880_PM_ENABLE, 5, 0),
-	SND_SOC_DAPM_AIF_OUT("RLOUT", "HiFi Playback", 0, MAX9880_PM_ENABLE, 4, 0),
+	SND_SOC_DAPM_MIXER("ROUT Mixer", MAX9880_PM_ENABLE, 4, 0, &max9880_right_output_mixer_controls[0],
+		ARRAY_SIZE(max9880_right_output_mixer_controls)),
+
+	SND_SOC_DAPM_DAC("DAC Left", "Left HiFi Playback", MAX9880_PM_ENABLE, 3, 0),
+	SND_SOC_DAPM_DAC("DAC Right", "Right HiFi Playback", MAX9880_PM_ENABLE, 2, 0),
+
 };
 
 static const struct snd_soc_dapm_route max9880_intercon[] = {
@@ -362,27 +355,27 @@ static const struct snd_soc_dapm_route max9880_intercon[] = {
 	//{"Line Input", NULL, "RLINEIN"},
 	{"Input Mixer", NULL, "MMICIN"},
 	{"Input Mixer", NULL, "EMICIN"},
-	{"Output Mixer", NULL, "LLINEIN"},
-	{"Output Mixer", NULL, "RLINEIN"},
-
 	/* Outputs */
-	{"LOUTP", NULL, "Output Mixer"}, // Speaker output
-	{"ROUTP", NULL, "Output Mixer"}, // Speaker output
-	{"LOUTL", "LLOUT", "Output Mixer"}, // Line output
-	{"LOUTR", "RLOUT", "Output Mixer"}, // Line output
+	{"LOUTP", "NULL", "LOUT Mixer"}, // Speaker output
+	{"ROUTP", "NULL", "ROUT Mixer"}, // Speaker output
+	{"LOUTL", "NULL", "LOUT Mixer"}, // Line output
+	{"LOUTR", "NULL", "ROUT Mixer"}, // Line output
 
 	/* Input mixer */
 	//{"Input Mixer", NULL, "Line Input"},
 	//{"Input Mixer", NULL, "Mic Input"},
 
 	/* ADC */
-	{"LADC", NULL, "Input Mixer"},
-	{"RADC", NULL, "Input Mixer"},
+	{"ADC Left", "NULL", "Input Mixer"},
+	{"ADC Right", "NULL", "Input Mixer"},
 
 	/* Output mixer */
+	{"LOUT Mixer", "Left LIN", "LLINEIN"},
+	{"ROUT Mixer", "Right LIN", "RLINEIN"},
+
 	//{"Output Mixer", NULL, "Line Input"},
-	{"Output Mixer", NULL, "LDAC"},
-	{"Output Mixer", NULL, "RDAC"},
+	{"LOUT Mixer", "DACL", "DAC Left"},
+	{"ROUT Mixer", "DACR", "DAC Right"},
 
 	/* TERMINATOR */
 	//{NULL, NULL, NULL},
@@ -510,11 +503,6 @@ static int max9880_hw_params(struct snd_pcm_substream *substream,
 	reg |= MAX9880_HPMODE_STEREO_CAPL;
 	snd_soc_write(codec, MAX9880_MODE_CONFIG, reg);
 
-	reg = snd_soc_read(codec, MAX9880_PM_ENABLE);
-	reg |= MAX9880_LOLEN;
-	reg |= MAX9880_LOREN;
-	snd_soc_write(codec, MAX9880_PM_ENABLE, reg);
-
 	return 0;
 }
 
@@ -598,7 +586,6 @@ static int max9880_set_bias_level(struct snd_soc_codec *codec,
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 	case SND_SOC_BIAS_PREPARE:
-		break;
 	case SND_SOC_BIAS_STANDBY:
 		ret = snd_soc_cache_sync(codec);
 		if (ret) {

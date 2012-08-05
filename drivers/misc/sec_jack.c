@@ -397,7 +397,11 @@ static void __exit sec_jack_exit(void)
 	platform_driver_unregister(&sec_jack_driver);
 }
 
+#ifdef CONFIG_MACH_GT_S8000
+late_initcall(sec_jack_init);
+#else
 module_init(sec_jack_init);
+#endif
 module_exit(sec_jack_exit);
 
 MODULE_AUTHOR("ms17.kim@samsung.com");
