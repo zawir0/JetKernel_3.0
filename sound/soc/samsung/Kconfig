@@ -158,6 +158,16 @@ config SND_SOC_SAMSUNG_GT_I5700
 	  Galaxt GT-i5700 (Spica) phone with the AK4671 audio codec
 	  and MAX9877 audio amplifier.
 
+config SND_SOC_SAMSUNG_GT_S8000
+	tristate "SoC I2S Audio support for GT-S8000 (Jet) - MAX9880"
+	depends on SND_SOC_SAMSUNG && (MACH_GT_S8000)
+	select SND_SAMSUNG_I2S
+	select SND_SOC_MAX9880
+	select SND_SOC_MAX8906
+	help
+	  Say Y if you want to add support for SoC audio on Samsung
+	  GT-S8000 (Jet) phone with the MAX9880 audio codec.
+
 config SND_SOC_GONI_AQUILA_WM8994
 	tristate "SoC I2S Audio support for AQUILA/GONI - WM8994"
 	depends on SND_SOC_SAMSUNG && (MACH_GONI || MACH_AQUILA)

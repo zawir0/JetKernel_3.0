@@ -55,7 +55,7 @@
 #include <linux/mtd/onenand.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/bml.h>
-#include <linux/power/spica_battery.h>
+#include <linux/power/jet_battery.h>
 #include <linux/input/qt5480_ts.h>
 #include <linux/wlan_plat.h>
 #include <linux/akm8973.h>
@@ -65,9 +65,10 @@
 #include <linux/leds-regulator.h>
 #include <linux/memory_alloc.h>
 #include <linux/memblock.h>
+#include <linux/i2c/max8906.h>
 
 #include <sound/gt_i5700.h>
-#include <sound/ak4671.h>
+#include <sound/max8906-amp.h>
 
 #include <video/s6d05a.h>
 #include <video/ams310fn07.h>
@@ -218,6 +219,8 @@
 #define IRQ_HEADSET		IRQ_EINT(11)	//J
 /* Falling edge */
 #define IRQ_FSA9480		IRQ_EINT(12)	//J
+/* Falling edge */
+#define IRQ_FM			IRQ_EINT(18)
 /* Both edges */
 #define IRQ_HOLD_KEY		IRQ_EINT(17)
 /* Both edges */
@@ -329,42 +332,42 @@ static struct platform_device jet_usbsw_i2c = {
 	.dev.platform_data	= &jet_usbsw_i2c_pdata,
 };
 
-static bool spica_usb_connected = 0;
-static bool spica_ac_connected = 0;
+static bool jet_usb_connected = 0;
+static bool jet_ac_connected = 0;
 
-static spica_battery_notify_func_t *spica_battery_notify_func = 0;
+static jet_battery_notify_func_t *jet_battery_notify_func = 0;
 
-static struct platform_device spica_battery;
-static void spica_battery_notify(void)
+static struct platform_device jet_battery;
+static void jet_battery_notify(void)
 {
-	enum spica_battery_supply supply = SPICA_BATTERY_NONE;
+	enum jet_battery_supply supply = JET_BATTERY_NONE;
 
-	if (!spica_battery_notify_func)
+	if (!jet_battery_notify_func)
 		return;
 
-	if (spica_usb_connected)
-		supply = SPICA_BATTERY_USB;
-	if (spica_ac_connected)
-		supply = SPICA_BATTERY_AC;
+	if (jet_usb_connected)
+		supply = JET_BATTERY_USB;
+	if (jet_ac_connected)
+		supply = JET_BATTERY_AC;
 
-	spica_battery_notify_func(&spica_battery, supply);
+	jet_battery_notify_func(&jet_battery, supply);
 }
 
-static void spica_usb_callback(bool attached)
+static void jet_usb_callback(bool attached)
 {
-	spica_usb_connected = attached;
-	spica_battery_notify();
+	jet_usb_connected = attached;
+	jet_battery_notify();
 }
 
-static void spica_ac_callback(bool attached)
+static void jet_ac_callback(bool attached)
 {
-	spica_ac_connected = attached;
-	spica_battery_notify();
+	jet_ac_connected = attached;
+	jet_battery_notify();
 }
 
 static struct fsa9480_platform_data jet_fsa9480_pdata = {
-	.usb_cb		= spica_usb_callback,
-	.charger_cb	= spica_ac_callback,
+	.usb_cb		= jet_usb_callback,
+	.charger_cb	= jet_ac_callback,
 };
 
 static struct i2c_board_info jet_usbsw_i2c_devs[] __initdata = {
@@ -393,18 +396,19 @@ static struct platform_device jet_fm_i2c = {
 	.dev.platform_data	= &jet_fm_i2c_pdata,
 };
 
-static struct ak4671_platform_data spica_ak4671_pdata = {
-	.gpio_npdn = GPIO_MAX8906_AMP_EN,		// previously AUDIO_EN
+#if 0
+static struct si470x_platform_data jet_si470x_pdata = {
+	.gpio_fm_on = GPIO_FM_LDO_ON,
+	.gpio_fm_reset = GPIO_FM_RST,
 };
+#endif
 
 static struct i2c_board_info jet_fm_i2c_devs[] __initdata = {
 	{
-		.type		= "ak4671",
-		.addr		= 0x12,
-		.platform_data	= &spica_ak4671_pdata,
-	}, {
-		.type		= "max9877",
-		.addr		= 0x4d,
+		.type		= "si470x",
+		.addr		= 0x10,
+		.irq		= IRQ_FM,
+//		.platform_data	= &jet_si470x_pdata,
 	}
 };
 
@@ -703,29 +707,29 @@ static struct max8906_platform_data jet_max8906_pdata = {
 static struct i2c_board_info jet_pmic_i2c_devs[] __initdata = {
 		{
 			.type		= "max8906",
-			.addr		= 0xD0,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.addr		= 0x68,
 			.platform_data	= &jet_max8906_pdata,
 		},
 		{
 			.type		= "max8906",
-			.addr		= 0x8E,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.addr		= 0x47,
 			.platform_data	= &jet_max8906_pdata,
 		},
 		{
 			.type		= "max8906",
-			.addr		= 0x78,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.addr		= 0x3C,
 			.platform_data	= &jet_max8906_pdata,
 		},
 		{
 			.type		= "max8906",
-			.addr		= 0x68,			// FIXME: max8906 regulators only use adr 0x78 ???
+			.addr		= 0x34,
 			.platform_data	= &jet_max8906_pdata,
 		},
 };
 
 
-/* I2C 4 (GPIO) - Audio codec, VGACam
- * 	MAX8977 (Audio codec) 
+/* I2C 5 (GPIO) - Audio codec, VGACam
+ * 	MAX8906 (Audio Amp)
  */
 static struct i2c_gpio_platform_data jet_audio_i2c_pdata = {
 	.sda_pin		= GPIO_AP_SDA_1_8V,
@@ -739,20 +743,19 @@ static struct platform_device jet_audio_i2c = {
 	.dev.platform_data	= &jet_audio_i2c_pdata,
 };
 
-static struct qt5480_platform_data spica_qt5480_pdata = {
-//	.rst_gpio	= GPIO_TOUCH_RST,
-//	.rst_inverted	= 0,
-	.en_gpio	= GPIO_TOUCH_EN,
-	.en_inverted	= 0,
+static struct max8906_codec_platform_data jet_max8906_codec_pdata = {
+	.gpio_ampen = GPIO_MAX8906_AMP_EN,
 };
 
 static struct i2c_board_info jet_audio_i2c_devs[] __initdata = {
 	{
-		.type		= "qt5480_ts",
-		.addr		= 0x30,
-//		.irq		= IRQ_QT5480,
-		.platform_data	= &spica_qt5480_pdata,
-	}
+		.type		= "max9880",
+		.addr		= 0x10,
+	}, {
+			.type		= "max8906-codec",
+			.addr		= 0x3c,
+			.platform_data	= &jet_max8906_codec_pdata,
+	},
 };
 
 struct platform_device sec_device_rtc = {
@@ -842,21 +845,6 @@ static void __init spica_reserve(void)
 /*
  * LCD screen
  */
-static struct s6d05a_platform_data spica_s6d05a_pdata = {
-	.reset_gpio	= GPIO_LCD_RST_N,
-	.cs_gpio	= GPIO_LCD_CS_N,
-	.sck_gpio	= GPIO_LCD_SCLK,
-	.sda_gpio	= GPIO_LCD_SDI,
-};
-
-static struct platform_device spica_s6d05a = {
-	.name		= "s6d05a-lcd",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &spica_s6d05a_pdata,
-		.parent		= &s3c_device_fb.dev
-	},
-};
 
 static struct ams310fn07_platform_data jet_ams310fn07_pdata = {
 	.reset_gpio	= GPIO_LCD_RST_N,
@@ -1039,24 +1027,6 @@ static struct s3c_fb_pd_win jet_fb_win[] = {
 #endif
 };
 
-static void spica_fb_setup_gpio(void)
-{
-	/* Nothing to do here */
-}
-
-static struct s3c_fb_platdata spica_lcd_pdata __initdata = {
-	.setup_gpio	= spica_fb_setup_gpio,
-	.win[0]		= &jet_fb_win[0],
-#ifdef SECOND_FB
-	.win[1]		= &jet_fb_win[1],
-#endif
-	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
-	.vidcon1	= VIDCON1_INV_HSYNC | VIDCON1_INV_VSYNC
-			| VIDCON1_INV_VCLK,
-	.dithmode	= DITHMODE_R_POS_8BIT | DITHMODE_G_POS_8BIT
-			| DITHMODE_B_POS_8BIT | DITHMODE_DITH_EN,
-};
-
 static void jet_fb_setup_gpio(void)
 {
 	/* Nothing to do here */
@@ -1097,26 +1067,6 @@ static struct platform_device spica_ram_console = {
  * Matrix keyboard (FIXME: Assign standard key codes)
  */
 
-static uint32_t spica_keymap[] __initdata = {
-	/* KEY(row, col, keycode) */
-	KEY(0, 0, 201), KEY(0, 1, 209) /* Reserved  */ /* Reserved  */,
-	KEY(1, 0, 202), KEY(1, 1, 210), KEY(1, 2, 218), KEY(1, 3, 226),
-	KEY(2, 0, 203), KEY(2, 1, 211), KEY(2, 2, 219), KEY(2, 3, 227),
-	KEY(3, 0, 204), KEY(3, 1, 212) /* Reserved  */, KEY(3, 3, 228),
-};
-
-static struct matrix_keymap_data spica_keymap_data __initdata = {
-	.keymap		= spica_keymap,
-	.keymap_size	= ARRAY_SIZE(spica_keymap),
-};
-
-static struct samsung_keypad_platdata spica_keypad_pdata __initdata = {
-	.keymap_data	= &spica_keymap_data,
-	.rows		= 4,
-	.cols		= 4,
-	.no_autorepeat	= 1,
-};
-
 static uint32_t jet_keymap[] __initdata = {
 	/* KEY(row, col, keycode) */
 	KEY(0, 0, 1), KEY(0, 1, 9), KEY(0, 2, 17),
@@ -1140,42 +1090,6 @@ static struct samsung_keypad_platdata jet_keypad_pdata __initdata = {
 /*
  * GPIO keys (FIXME: Assign standard key codes)
  */
-
-static struct gpio_keys_button spica_gpio_keys_data[] = {
-	{
-		.gpio			= GPIO_POWER_N,
-		.code			= 249,
-		.desc			= "Power",
-		.active_low		= 1,
-		.debounce_interval	= 5,
-		.type                   = EV_KEY,
-		.wakeup			= 1,
-/*
-	}, {
-		.gpio			= GPIO_HOLD_KEY_N,
-		.code			= 251,
-		.desc			= "Hold",
-		.active_low		= 1,
-		.debounce_interval	= 5,
-		.type                   = EV_KEY,
-		.wakeup			= 1,
-*/
-	},
-};
-
-static struct gpio_keys_platform_data spica_gpio_keys_pdata  = {
-	.buttons	= spica_gpio_keys_data,
-	.nbuttons	= ARRAY_SIZE(spica_gpio_keys_data),
-};
-
-static struct platform_device spica_gpio_keys = {
-	.name		= "gpio-keys",
-	.id		= 0,
-	.num_resources	= 0,
-	.dev		= {
-		.platform_data	= &spica_gpio_keys_pdata,
-	}
-};
 
 static struct gpio_keys_button jet_gpio_keys_data[] = {
 	{
@@ -1348,6 +1262,7 @@ static struct platform_device spica_bml_device = {
  */
 
 /* TODO: Verify these values. */
+#if 0
 static struct spica_battery_threshold spica_battery_percent_lut[] = {
 	/* ADC, 0.001% */
 	{ 2170,      0 },
@@ -1377,8 +1292,9 @@ static struct spica_battery_threshold spica_battery_volt_lut[] = {
 	{ 2853, 4176000 },
 	{ 3080, 4500000 },
 };
+#endif
 
-static struct spica_battery_threshold spica_battery_temp_lut[] = {
+static struct jet_battery_threshold jet_battery_temp_lut[] = {
 	/* ADC, 0.001*C */
 	{  324,  65000 },
 	{  364,  61000 },
@@ -1400,36 +1316,36 @@ static struct spica_battery_threshold spica_battery_temp_lut[] = {
 	{ 2042, -30000 },
 };
 
-static void spica_charger_supply_detect_init(spica_battery_notify_func_t *func)
+static void jet_charger_supply_detect_init(jet_battery_notify_func_t *func)
 {
-	spica_battery_notify_func = func;
-	spica_battery_notify();
+	jet_battery_notify_func = func;
+	jet_battery_notify();
 }
 
-static void spica_charger_supply_detect_cleanup(void)
+static void jet_charger_supply_detect_cleanup(void)
 {
-	spica_battery_notify_func = NULL;
+	jet_battery_notify_func = NULL;
 }
 
-static struct spica_battery_pdata spica_battery_pdata = {
+static struct jet_battery_pdata jet_battery_pdata = {
 	.gpio_pok		= GPIO_TA_SEL,
 	.gpio_pok_inverted	= 1,
-//	.gpio_chg		= GPIO_TA_CHG_N,
-//	.gpio_chg_inverted	= 1,
+	.gpio_chg		= GPIO_PMIC_INT_N,
+	.gpio_chg_inverted	= 1,
 //	.gpio_en		= GPIO_TA_EN,
 //	.gpio_en_inverted	= 1,
 
-	.percent_lut		= spica_battery_percent_lut,
-	.percent_lut_cnt	= ARRAY_SIZE(spica_battery_percent_lut),
-	.volt_lut		= spica_battery_volt_lut,
-	.volt_lut_cnt		= ARRAY_SIZE(spica_battery_volt_lut),
-	.temp_lut		= spica_battery_temp_lut,
-	.temp_lut_cnt		= ARRAY_SIZE(spica_battery_temp_lut),
+//	.percent_lut		= spica_battery_percent_lut,
+//	.percent_lut_cnt	= ARRAY_SIZE(spica_battery_percent_lut),
+//	.volt_lut		= spica_battery_volt_lut,
+//	.volt_lut_cnt		= ARRAY_SIZE(spica_battery_volt_lut),
+	.temp_lut		= jet_battery_temp_lut,
+	.temp_lut_cnt		= ARRAY_SIZE(jet_battery_temp_lut),
 
-	.calibration		= 2447,
+//	.calibration		= 2447,
 
 	.volt_channel		= 0,
-	.temp_channel		= 1,
+	.temp_channel		= 2,
 
 	.low_temp_enter		= 0,
 	.low_temp_exit		= 2000,
@@ -1438,15 +1354,15 @@ static struct spica_battery_pdata spica_battery_pdata = {
 
 	.technology		= POWER_SUPPLY_TECHNOLOGY_LION,
 
-	.supply_detect_init	= spica_charger_supply_detect_init,
-	.supply_detect_cleanup	= spica_charger_supply_detect_cleanup,
+	.supply_detect_init	= jet_charger_supply_detect_init,
+	.supply_detect_cleanup	= jet_charger_supply_detect_cleanup,
 };
 
-static struct platform_device spica_battery = {
-	.name		= "spica-battery",
+static struct platform_device jet_battery = {
+	.name		= "jet-battery",
 	.id		= -1,
 	.dev		= {
-		.platform_data	= &spica_battery_pdata,
+		.platform_data	= &jet_battery_pdata,
 	}
 };
 
@@ -1815,13 +1731,13 @@ static struct platform_device spica_usb_rndis = {
 struct class *sec_class;
 EXPORT_SYMBOL(sec_class);
 
-#define SPICA_DPRAM_START	0x5d000000
-#define SPICA_DPRAM_SIZE	SZ_16M
+#define JET_DPRAM_START		0x5d000000
+#define JET_DPRAM_SIZE		SZ_16M
 
-static struct resource spica_dpram_resources[] = {
+static struct resource jet_dpram_resources[] = {
 	{
-		.start	= SPICA_DPRAM_START,
-		.end	= SPICA_DPRAM_START + SPICA_DPRAM_SIZE - 1,
+		.start	= JET_DPRAM_START,
+		.end	= JET_DPRAM_START + JET_DPRAM_SIZE - 1,
 		.flags	= IORESOURCE_MEM,
 	}
 };
@@ -1837,7 +1753,7 @@ struct dpram_platform_data {
 	unsigned int gpio_sim_detect_n;
 };
 
-static struct dpram_platform_data spica_dpram_pdata = {
+static struct dpram_platform_data jet_dpram_pdata = {
 	.gpio_phone_on		= GPIO_PHONE_ON,
 //	.gpio_phone_rst_n	= GPIO_PHONE_RST_N,	// FIXME: This GPIO is handeled via max8906
 	.gpio_phone_active	= GPIO_PHONE_ACTIVE,
@@ -1848,13 +1764,13 @@ static struct dpram_platform_data spica_dpram_pdata = {
 //	.gpio_sim_detect_n	= GPIO_SIM_DETECT_N,	// FIXME: How to detect SIM?
 };
 
-static struct platform_device spica_dpram_device = {
-	.name		= "samsung-dpram",
+static struct platform_device jet_dpram_device = {
+	.name		= "jet-dpram",
 	.id		= -1,
-	.num_resources	= ARRAY_SIZE(spica_dpram_resources),
-	.resource	= spica_dpram_resources,
+	.num_resources	= ARRAY_SIZE(jet_dpram_resources),
+	.resource	= jet_dpram_resources,
 	.dev		= {
-		.platform_data = &spica_dpram_pdata,
+		.platform_data = &jet_dpram_pdata,
 	},
 };
 
@@ -1889,6 +1805,8 @@ static void snd_set_mic_bias(bool on)
 	snd_mic_bias = on;
 //	gpio_set_value(GPIO_MICBIAS_EN, snd_mic_bias || jack_mic_bias);
 // FIXME: enable MICBIAS_EAR_LDO_2.5V via MAX8906
+	//if (Set_MAX8906_PM_REG(WMEMEN, snd_mic_bias || jack_mic_bias))
+		printk("Successfully enabled regulator WMEMEN\n");
 
 	local_irq_restore(flags);
 }
@@ -1896,12 +1814,11 @@ static void snd_set_mic_bias(bool on)
 static void jack_set_mic_bias(bool on)
 {
 	unsigned long flags;
-
 	local_irq_save(flags);
 
 	jack_mic_bias = on;
-//	gpio_set_value(GPIO_MICBIAS_EN, snd_mic_bias || jack_mic_bias);
-// FIXME: enable MICBIAS_EAR_LDO_2.5V via MAX8906
+	if (Set_MAX8906_PM_REG(WMEMEN, snd_mic_bias || jack_mic_bias))
+		printk("Changed Ear Mic Bias to %d\n", snd_mic_bias || jack_mic_bias);
 
 	local_irq_restore(flags);
 }
@@ -1973,15 +1890,15 @@ static struct platform_device spica_jack_device = {
 	},
 };
 
-static struct gt_i5700_audio_pdata spica_audio_pdata = {
+static struct gt_i5700_audio_pdata jet_audio_pdata = {
 	.set_micbias	= snd_set_mic_bias,
 };
 
-static struct platform_device spica_audio_device = {
-	.name	= "gt_i5700_audio",
+static struct platform_device jet_audio_device = {
+	.name	= "gt_s8000_audio",
 	.id	= -1,
 	.dev	= {
-		.platform_data = &spica_audio_pdata,
+		.platform_data = &jet_audio_pdata,
 	},
 };
 
@@ -2043,17 +1960,18 @@ static struct platform_device *spica_devices[] __initdata = {
 	&jet_gpio_keys,
 	&s3c_device_adc,
 	&s3c_device_ts,
-	//&spica_battery,
-	&sec_device_battery,
+	&jet_battery,
+	//&sec_device_battery,
 	&samsung_asoc_dma,
 	&s3c64xx_device_iis0,
 	&s3c_device_timer[1],
 	&spica_wlan_device,
 	&spica_bt_device,
-	&spica_dpram_device,
+	&jet_dpram_device,
 	&spica_vibetonz_device,
-	//&spica_jack_device,
-	&spica_audio_device,
+	&spica_jack_device,
+	//&spica_audio_device,
+	&jet_audio_device,
 	&spica_bml_device,
 };
 
@@ -2257,16 +2175,16 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C64XX_GPH9_MMC2_DATA3, S3C_PIN_PULL(NONE),
 
 	/* I2S 0 */
-	S3C64XX_GPD0_I2S0_CLK, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPD2_I2S0_LRCLK, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPD3_I2S0_DI, S3C_PIN_PULL(DOWN),
+	S3C64XX_GPD0_I2S0_CLK, S3C_PIN_PULL(NONE),
+	S3C64XX_GPD2_I2S0_LRCLK, S3C_PIN_PULL(NONE),
+	S3C64XX_GPD3_I2S0_DI, S3C_PIN_PULL(NONE),
 	S3C64XX_GPD4_I2S0_DO, S3C_PIN_PULL(NONE),
 
 	/* PCM 1 */
-	S3C64XX_GPE0_PCM1_SCLK, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPE2_PCM1_FSYNC, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPE3_PCM1_SIN, S3C_PIN_PULL(DOWN),
-	S3C64XX_GPE4_PCM1_SOUT, S3C_PIN_PULL(DOWN),
+	S3C64XX_GPE0_PCM1_SCLK, S3C_PIN_PULL(NONE),
+	S3C64XX_GPE2_PCM1_FSYNC, S3C_PIN_PULL(NONE),
+	S3C64XX_GPE3_PCM1_SIN, S3C_PIN_PULL(NONE),
+	S3C64XX_GPE4_PCM1_SOUT, S3C_PIN_PULL(NONE),
 
 	/* CAMIF */
 	S3C64XX_GPF0_CAMIF_CLK, S3C_PIN_PULL(NONE),
@@ -2357,8 +2275,8 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_CAM_EN), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EARPATH_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_CP_CODEC_SW), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_MAIN_CP_CODEC_SW), S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_FM_RST), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_MAIN_CP_CODEC_SW), S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_RST), 		S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CAM_VGA_RST_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CAM_VGA_STBY_N), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MSENSE_RST), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2373,7 +2291,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_ALPS_ON), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_MAX8906_AMP_EN), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PDA_ACTIVE), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_FM_LDO_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_LDO_ON), 	S3C_PIN_OUT(1), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PHONE_ON), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_CP_BOOT_SEL), 	S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_PCM_SEL), 		S3C_PIN_OUT(0), S3C_PIN_PULL(NONE),
@@ -2396,7 +2314,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 
 	/* EINTs */
 //	S3C_PIN(GPIO_HOLD_KEY_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
-	S3C_PIN(GPIO_TA_SEL), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_TA_SEL), 		S3C_PIN_IN, S3C_PIN_PULL(UP),
 //	S3C_PIN(GPIO_TOUCH_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BT_HOST_WAKE), 	S3C_PIN_IN, S3C_PIN_PULL(DOWN),
 //	S3C_PIN(GPIO_TA_CHG_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
@@ -2411,6 +2329,7 @@ static struct s3c_pin_cfg_entry spica_pin_config[] __initdata = {
 	S3C_PIN(GPIO_PMIC_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_JACK_INT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_DET_35), 		S3C_PIN_CFG(3), S3C_PIN_PULL(NONE),
+	S3C_PIN(GPIO_FM_INT), 		S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_EAR_SEND_END), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_RESOUT_N), 	S3C_PIN_IN, S3C_PIN_PULL(NONE),
 	S3C_PIN(GPIO_BOOT_EINT13), 	S3C_PIN_CFG(1), S3C_PIN_PULL(NONE),
@@ -2780,7 +2699,7 @@ static void __init spica_machine_init(void)
 
 	/* Setup SDHCI */
 	s3c_sdhci0_set_platdata(&jet_hsmmc0_pdata);
-	//s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
+	s3c_sdhci0_set_platdata(&jet_hsmmc1_pdata);
 	s3c_sdhci2_set_platdata(&spica_hsmmc2_pdata);
 
 	/* Setup keypad */

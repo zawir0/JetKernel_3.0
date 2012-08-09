@@ -14,6 +14,9 @@
 #define NULL   0
 #endif
 
+#define CHARGING_ON 	1
+#define CHARGING_OFF 	0
+
 typedef  unsigned char      boolean;     /* Boolean value type. */
 
 typedef  unsigned long int  uint32;      /* Unsigned 32 bit value */
@@ -130,6 +133,7 @@ typedef enum {
 // So, IRQ\ pin is not asserted.
 // If you want to clear some bit, please check the max8906_irq_table[] for interrupt service routine.
 #define NUMOFIRQ    0x05
+//#define ON_OFF_IRQ_M    (SW_R_M | SW_F_M | SW_1SEC_M | JIG_R_M | JIG_F_M | SW_3SEC_M | MPL_EVENT_M)
 #define ON_OFF_IRQ_M    (SW_R_M | SW_F_M | SW_1SEC_M | JIG_R_M | JIG_F_M | SW_3SEC_M | MPL_EVENT_M)
 #define CHG_IRQ1_M      (VAC_R_M | VAC_F_M | VAC_OVP_M | VBUS_F_M | VBUS_R_M | VBUS_OVP_M)
 #define CHG_IRQ2_M      (CHG_TMR_FAULT_M | CHG_TOPOFF_M | CHG_DONE_M | CHG_RST_M | MBATTLOWR_M | MBATTLOWF_M)

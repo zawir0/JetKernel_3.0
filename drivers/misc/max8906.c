@@ -7,6 +7,8 @@
 #include <linux/kernel.h>
 #include <linux/i2c/maximi2c.h>
 #include <linux/i2c/pmic.h>
+#include <linux/gpio.h>
+#include <linux/interrupt.h>
 
 #ifdef PREFIX
 #undef PREFIX
@@ -15,7 +17,15 @@
 
 #define MSG_HIGH(a,b,c,d)		{}
 
-#define pmic_extra_debug
+//#define pmic_extra_debug
+
+#define GPIO_PMIC_INT_N		S3C64XX_GPN(8)
+
+extern void s3c_cable_check_status(int status);
+
+static struct work_struct cable_work;
+
+static int status = CHARGING_OFF;
 
 max8906_register_type  max8906reg[ENDOFREG] =
 {
@@ -1239,13 +1249,22 @@ max8906_regulator_name_type regulator_name[NUMOFREG] =
 
 max8906_irq_mask_type max8906_irq_init_array[NUMOFIRQ] = {
 
+    { REG_ON_OFF_IRQ_MASK, 0 },
+    { REG_CHG_IRQ1_MASK,   0  },
+    { REG_CHG_IRQ2_MASK,   0  },
+    { REG_RTC_IRQ_MASK,    RTC_IRQ_M   },
+    { REG_TSC_INT_MASK,    TSC_INT_M   }
+};
+#if 0
+max8906_irq_mask_type max8906_irq_init_array[NUMOFIRQ] = {
+
     { REG_ON_OFF_IRQ_MASK, ON_OFF_IRQ_M},
     { REG_CHG_IRQ1_MASK,   CHG_IRQ1_M  },
     { REG_CHG_IRQ2_MASK,   CHG_IRQ2_M  },
     { REG_RTC_IRQ_MASK,    RTC_IRQ_M   },
     { REG_TSC_INT_MASK,    TSC_INT_M   }
 };
-
+#endif
 max8906_irq_table_type max8906_irq_table[ENDOFTIRQ+1] = {
     /* ON_OFF_IRQ */
 	{ 0, SW_R     , NULL }, // IRQ_SW_R
@@ -2567,15 +2586,21 @@ EXAMPLE
 ===========================================================================*/
 void MAX8906_PM_IRQ_isr(void)
 {
-    byte pm_irq_reg[4];
-    byte pm_irq_mask[4];
-    byte irq_name;
+    byte pm_irq_reg[5];
+    byte pm_irq_mask[5];
+    byte irq_name, buf;
+
     if(pmic_read(max8906reg[REG_ON_OFF_IRQ].slave_addr, max8906reg[REG_ON_OFF_IRQ].addr, &pm_irq_reg[0], (byte)1) != PMIC_PASS)
     {
         MSG_HIGH("IRQ register isn't read", 0, 0, 0);
         return; // return error
     }
-    if(pmic_read(max8906reg[REG_CHG_IRQ1].slave_addr, max8906reg[REG_CHG_IRQ1].addr, &pm_irq_reg[1], (byte)2) != PMIC_PASS)
+    if(pmic_read(max8906reg[REG_CHG_IRQ1].slave_addr, max8906reg[REG_CHG_IRQ1].addr, &pm_irq_reg[1], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+    if(pmic_read(max8906reg[REG_CHG_IRQ2].slave_addr, max8906reg[REG_CHG_IRQ2].addr, &pm_irq_reg[2], (byte)1) != PMIC_PASS)
     {
         MSG_HIGH("IRQ register isn't read", 0, 0, 0);
         return; // return error
@@ -2585,23 +2610,57 @@ void MAX8906_PM_IRQ_isr(void)
         MSG_HIGH("IRQ register isn't read", 0, 0, 0);
         return; // return error
     }
-
-    if(pmic_read(max8906reg[REG_ON_OFF_IRQ_MASK].slave_addr, max8906reg[REG_ON_OFF_IRQ].addr, &pm_irq_reg[0], (byte)1) != PMIC_PASS)
-    {
-        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
-        return; // return error
-    }
-    if(pmic_read(max8906reg[REG_CHG_IRQ1_MASK].slave_addr, max8906reg[REG_CHG_IRQ1].addr, &pm_irq_reg[1], (byte)2) != PMIC_PASS)
-    {
-        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
-        return; // return error
-    }
-    if(pmic_read(max8906reg[REG_RTC_IRQ_MASK].slave_addr, max8906reg[REG_RTC_IRQ].addr, &pm_irq_reg[3], (byte)1) != PMIC_PASS)
+    if(pmic_read(max8906reg[REG_EXTWKSEL].slave_addr, max8906reg[REG_EXTWKSEL].addr, &pm_irq_reg[4], (byte)1) != PMIC_PASS)
     {
         MSG_HIGH("IRQ register isn't read", 0, 0, 0);
         return; // return error
     }
 
+    if(pmic_read(max8906reg[REG_ON_OFF_IRQ_MASK].slave_addr, max8906reg[REG_ON_OFF_IRQ_MASK].addr, &pm_irq_mask[0], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+    if(pmic_read(max8906reg[REG_CHG_IRQ1_MASK].slave_addr, max8906reg[REG_CHG_IRQ1_MASK].addr, &pm_irq_mask[1], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+    if(pmic_read(max8906reg[REG_CHG_IRQ2_MASK].slave_addr, max8906reg[REG_CHG_IRQ2_MASK].addr, &pm_irq_mask[2], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+    if(pmic_read(max8906reg[REG_RTC_IRQ_MASK].slave_addr, max8906reg[REG_RTC_IRQ_MASK].addr, &pm_irq_mask[3], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+    if(pmic_read(max8906reg[REG_ON_OFF_STAT].slave_addr, max8906reg[REG_ON_OFF_STAT].addr, &pm_irq_mask[4], (byte)1) != PMIC_PASS)
+    {
+        MSG_HIGH("IRQ register isn't read", 0, 0, 0);
+        return; // return error
+    }
+
+    printk("PMIC REG_ON_OFF_IRQ   : Value = 0x%x, mask = 0x%x\n", pm_irq_reg[0], pm_irq_mask[0]);
+    printk("PMIC REG_CHG_IRQ1     : Value = 0x%x, mask = 0x%x\n", pm_irq_reg[1], pm_irq_mask[1]);
+    printk("PMIC REG_CHG_IRQ2     : Value = 0x%x, mask = 0x%x\n", pm_irq_reg[2], pm_irq_mask[2]);
+    printk("PMIC REG_ON_OFF_STAT  : Value = 0x%x\n", pm_irq_mask[4]);
+    pmic_read(max8906reg[REG_IRQ_STAT].slave_addr, max8906reg[REG_IRQ_STAT].addr, &buf, (byte)1);
+    printk("PMIC REG_IRQ_STAT  : Value = 0x%x\n", buf);
+
+    if (pm_irq_reg[0] & max8906pm[JIG_R].mask)
+    {
+    	status = CHARGING_ON;
+    	schedule_work(&cable_work);
+    }
+    else if(!(pm_irq_reg[0] & max8906pm[JIG_R].mask) && !(pm_irq_reg[0] & max8906pm[JIG_F].mask))
+    {
+    	status = CHARGING_OFF;
+    	schedule_work(&cable_work);
+    }
+
+#if 0
     for(irq_name = START_IRQ; irq_name <= ENDOFIRQ; irq_name++)
     {
         if( (pm_irq_reg[max8906_irq_table[irq_name].item_num] & max8906pm[max8906_irq_table[irq_name].irq_reg].mask)
@@ -2611,9 +2670,15 @@ void MAX8906_PM_IRQ_isr(void)
             (max8906_irq_table[irq_name].irq_ptr)();
         }
     }
+#endif
+
 }
 
-
+static irqreturn_t max8906_pm_irq_handler (int irq, void *dev_id)
+{
+	MAX8906_PM_IRQ_isr();
+	return IRQ_HANDLED;
+}
 /*===========================================================================
 
 FUNCTION MAX8906_PM_TIRQ_isr                                
@@ -2749,19 +2814,6 @@ static struct i2c_client *max8906_adc_i2c_client = NULL;
 static struct i2c_client *max8906_gpm_i2c_client = NULL;
 static struct i2c_client *max8906_apm_i2c_client = NULL;
 
-/*
-static unsigned short max8906_normal_i2c[] = { I2C_CLIENT_END };
-static unsigned short max8906_ignore[] = { I2C_CLIENT_END };
-static unsigned short max8906_probe[] = { 3, (MAX8906_RTC_ID >> 1), 3, (MAX8906_ADC_ID >> 1),
-											3, (MAX8906_GPM_ID >> 1), 3, (MAX8906_APM_ID >> 1), I2C_CLIENT_END };
-
-static struct i2c_client_address_data max8906_addr_data = {
-	.normal_i2c = max8906_normal_i2c,
-	.ignore		= max8906_ignore,
-	.probe		= max8906_probe,
-};
-*/
-
 static int max8906_read(struct i2c_client *client, u8 reg, u8 *data)
 {
 	int ret;
@@ -2812,6 +2864,22 @@ static int max8906_write(struct i2c_client *client, u8 reg, u8 data)
 	}
 	return 0;
 }
+
+int max8906_audio_i2c_write (u8 reg, u8 data)
+{
+	u8 buf = data;
+	pmic_write(0x78, reg, &buf, 1);
+	return 0;
+}
+EXPORT_SYMBOL(max8906_audio_i2c_write);
+
+unsigned int max8906_audio_i2c_read (u8 reg)
+{
+	u8 data;
+	pmic_read(0x78, reg, &data, 1);
+	return data;
+}
+EXPORT_SYMBOL(max8906_audio_i2c_read);
 
 unsigned int pmic_read(u8 slaveaddr, u8 reg, u8 *data, u8 length)
 {
@@ -2894,41 +2962,7 @@ void max8906_debug_print( void)
   pmic_read( MAX8906_RTC_ID, 0x07, &yearm, 1);
   printk("[MAX8906]: DATE,TIME: %X.%X.%X%X, %X:%02X:%02X\n", day,month,yearm,yearl,hour,min,sec);
 
-  // here we read some couple of registers
-  /* pmic_read( MAX8906_ADC_ID, 0x0, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_STA_INT=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x1, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_INT_MSK=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x2, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_CNFG1  =0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x3, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_CNFG2  =0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x4, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_CNFG3  =0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x5, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_CNFG4  =0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x6, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_RES_CF1=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x7, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_AVG_CF1=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x8, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_ACQ_CF1=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x9, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_ACQ_CF2=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0xA, &tscbuff, 1); printk("[MAX8906 dbg]: TSC_ACQ_CF3=0x%02X\n",tscbuff); */
-
-  /* // set MBATT measurement */
-  /* if (FALSE == Set_MAX8906_TSC_CONV_REG(MBATT_Measurement, CONT)) { */
-  /*   printk("[MAX8906] failed to start MBATT Measurement\n"); */
-  /*   return; */
-  /* } */
-  /* tscbuff = 0x5; // Vref & CONT */
-  /* pmic_write( MAX8906_ADC_ID, 0xD8, &tscbuff, 1); printk("[MAX8906 dbg]: wrtite 0xD8=0x%02X\n",tscbuff); */
-
-
-  /* pmic_read( MAX8906_ADC_ID, 0x60, &tscbuff, 1); printk("[MAX8906 dbg]: 0x60=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x61, &tscbuff, 1); printk("[MAX8906 dbg]: 0x61=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x62, &tscbuff, 1); printk("[MAX8906 dbg]: 0x62=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x63, &tscbuff, 1); printk("[MAX8906 dbg]: 0x63=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x64, &tscbuff, 1); printk("[MAX8906 dbg]: 0x64=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x65, &tscbuff, 1); printk("[MAX8906 dbg]: 0x65=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x66, &tscbuff, 1); printk("[MAX8906 dbg]: 0x66=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x67, &tscbuff, 1); printk("[MAX8906 dbg]: 0x67=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x68, &tscbuff, 1); printk("[MAX8906 dbg]: 0x68=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x69, &tscbuff, 1); printk("[MAX8906 dbg]: 0x69=0x%02X\n",tscbuff); */
-  /* pmic_read( MAX8906_ADC_ID, 0x6A, &tscbuff, 1); printk("[MAX8906 dbg]: 0x6a=0x%02X\n",tscbuff); */
-
-    //  Measurement done?
+  //  Measurement done?
   /* do { */
   /*   status = Get_MAX8906_PM_REG(nCONV_NS, &tsc_buff); */
   /* } while ( !(status && (tsc_buff & nCONV_NS_M)) ); */
@@ -2997,7 +3031,7 @@ static int max8906_probe(struct i2c_client *client,const struct i2c_device_id *i
 {
 	struct max8906_state *state;
  	struct device *dev = &client->dev;
-	int ret;
+	int irq, ret = 0;
 
 	printk("KB: %s Entering\n", __FUNCTION__);
 
@@ -3044,6 +3078,7 @@ static int max8906_probe(struct i2c_client *client,const struct i2c_device_id *i
 		max8906_gpm_i2c_client = client;
 	else /* (client->addr << 1) == MAX8906_APM_ID */
 		max8906_apm_i2c_client = client;
+
 
 error:
 #ifdef pmic_extra_debug	
@@ -3097,15 +3132,43 @@ int is_pmic_initialized(void)
 	return pmic_init_status;
 }
 
+static void max8906_cable_work(struct work_struct *work)
+{
+	byte jig_status;
+
+	s3c_cable_check_status(status);
+}
+
 static int __init max8906_init(void)
 {
-	int ret;
+	int irq, ret;
 	ret = i2c_add_driver(&max8906_driver);
 	printk("MAX8906: %s retval = %d\n",__FUNCTION__,ret);
 	pmic_init_status = 1;
 
+#if 0
+	INIT_WORK(&cable_work, max8906_cable_work);
+
+	/* Claim IRQs */
+	irq = gpio_to_irq(GPIO_PMIC_INT_N);
+	if (irq <= 0) {
+		printk("Failed to get PMIC irq.\n");
+		goto error;
+	}
+	ret = request_irq(irq, max8906_pm_irq_handler,
+			IRQF_TRIGGER_FALLING,
+				"max8906", NULL);
+	if (ret) {
+		printk("Failed to request POK irq (%d)\n", ret);
+		goto error;
+	}
+#endif
+
+	MAX8906_IRQ_init();
+
 	max8906_debug_print();
 
+error:
 	return ret;
 }
 
